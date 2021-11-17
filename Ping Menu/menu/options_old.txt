@@ -1,0 +1,49 @@
+{
+	"menu_id" : "pingmenu_mainmenu",
+	"parent_menu_id" : "blt_options",
+	"title" : "pingmenu_mainmenu_title",
+	"description" : "pingmenu_mainmenu_desc",
+	"back_callback" : "callback_pingmenu_mainmenu_close",
+	"priority" : 9,
+	"items" : [
+		{
+			"type" : "keybind",
+			"id" : "pingmenu_show",
+			"title" : "pingmenu_show_title",
+			"description" : "pingmenu_show_desc",
+			"keybind_id" : "pingmenu_show_keybind",
+			"run_in_game" : true,
+			"run_in_menu" : false,
+			"func" : "callback_pingmenu_show"
+		},
+		{
+			"type" : "toggle",
+			"id" : "pingmenu_usevoice",
+			"title" : "pingmenu_usevoice_title",
+			"description" : "pingmenu_usevoice_desc",
+			"callback" : "callback_pingmenu_usevoice",
+			"value" : "use_voice"
+		},
+		{
+			"type" : "toggle",
+			"id" : "pingmenu_useanim",
+			"title" : "pingmenu_useanim_title",
+			"description" : "pingmenu_useanim_desc",
+			"callback" : "callback_pingmenu_useanim",
+			"value" : "use_anim"
+		},
+		{
+			"type" : "multiple_choice",
+			"id" : "pingmenu_keybehavior",
+			"title" : "pingmenu_keybehavior_title",
+			"description" : "pingmenu_keybehavior_desc",
+			"callback" : "callback_pingmenu_keybehavior",
+			"items" : [
+				"pingmenu_keybehavior_a",
+				"pingmenu_keybehavior_b",
+				"pingmenu_keybehavior_c"
+			],
+			"value" : "keybehavior"			
+		}
+	]
+}
