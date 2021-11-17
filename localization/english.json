@@ -1,0 +1,21 @@
+{
+	"menu_missing_rmm_prompt_title" : "Missing RadialMouseMenu!",
+	"menu_missing_rmm_prompt_desc" : "Your installation of RadialMouseMenu is either missing or installed incorrectly! Please visit the mod page for more information: https://modworkshop.net/mod/27225",
+	"pingmenu_mainmenu_title" : "Ping Menu",
+	"pingmenu_mainmenu_desc" : "Ping Menu mod options",
+	"pingmenu_show_title" : "Show Ping Menu",
+	"pingmenu_show_desc" : "Opens the ping menu",
+	"pingmenu_usevoice_title" : "Use Voicelines",
+	"pingmenu_usevoice_desc" : "Play appropriate voice lines when pinging",
+	"pingmenu_usechat_title" : "Use Chat",
+	"pingmenu_usechat_desc" : "Auto-say appropriate chat messages when pinging",
+	"pingmenu_useanim_title" : "Use Gestures",
+	"pingmenu_useanim_desc" : "Plays appropriate hand animation when pinging",
+	"pingmenu_keybehavior_title" : "Keybind Mode",
+	"pingmenu_keybehavior_desc" : "Choose how to select items from the menu",
+	"pingmenu_keybehavior_a" : "Hold and Click",
+	"pingmenu_keybehavior_b" : "Hold and Release",
+	"pingmenu_keybehavior_c" : "Toggle and Click",
+	"pingmenu_info_title" : "Open manual",
+	"pingmenu_info_desc " : "Click for more information"
+}
