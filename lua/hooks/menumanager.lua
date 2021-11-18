@@ -1,8 +1,13 @@
 --[[ i have started, stopped, made working prototypes for, scrapped, and restarted this mod no less than 7 times at various points in my time modding this game
 
 todo: 
+	waypoint position updating
+	resolve passed waypoint_data table confusion. seriously dude write it down and stop staying up for 24h
+	
 	conceptually resolve desync issue
 	refactor "waypoints", the table that holds processed tweakdata for potential waypoints
+	
+
 
 --closed captions compatibility?
 --create spotlight over target
@@ -43,6 +48,14 @@ todo:
 --]]
 --wp_escort
 
+
+local mrot_y = mrotation.y
+local mvec3_rot = mvector3.rotate_with
+local mvec3_nrm = mvector3.normalize
+local mvec3_dot = mvector3.dot
+
+
+
 	-- Init mod values --
 QuickChat = QuickChat or {}
 QuickChat._mod_path = ModQuickChat and ModQuickChat.GetPath and ModQuickChat:GetPath() or ModPath
@@ -68,7 +81,7 @@ QuickChat.default_settings = {
 	max_pings_per_player = 2,
 	waypoint_fadeout_duration = 1
 }
-QuickChat.settings = table.deep_map_copy(QuickChat.default_settings)
+QuickChat.settings = QuickChat.settings or table.deep_map_copy(QuickChat.default_settings)
 
 QuickChat.radial_menu_object_template = {
 	name = "PingMenu",
@@ -96,7 +109,7 @@ QuickChat.radial_menu_item_template = {
 }
 --QuickChat.radial_menu_data = {} --for reference
 
-QuickChat.tweak_data = {
+QuickChat.tweak_data = QuickChat.tweak_data or {
 	current_network_message = "QuickChat_v1_Add",
 	network_operation_ids = {
 		REGISTER = 1,
@@ -196,32 +209,32 @@ QuickChat.tweak_data = {
 
 --tracker for the number of unique waypoints that a player has created;
 --servers as an id to sync to other players when a destroy is requested
-QuickChat.num_waypoints = 0
+QuickChat.num_waypoints = QuickChat.num_waypoints or 0
 
 --the custom waypoints for the user (not yet implemented)
-QuickChat.user_waypoints = {
+QuickChat.user_waypoints = QuickChat.user_waypoints or {
 --[[
 
 --]]
 }
 
 --all waypoints (combined user_waypoints and default_waypoints), processed
-QuickChat.waypoints = {
+QuickChat.waypoints = QuickChat.waypoints or {
 
 }
 
-QuickChat.registered_peers = {
+QuickChat.registered_peers = QuickChat.registered_peers or {
 	--[[
 		[id64] = {
 			version_id = "1"
 		},
 	--]]
 }
-QuickChat.active_waypoints = {} --the waypoints placed by someone in the current game
+QuickChat.active_waypoints = QuickChat.active_waypoints or {} --the waypoints placed by someone in the current game
 
-QuickChat.cast_slotmasks = {} --populated on load
+QuickChat.cast_slotmasks = QuickChat.cast_slotmasks or {} --populated on load
 
-QuickChat.active_radial_menus = {}
+QuickChat.active_radial_menus = QuickChat.active_radial_menus or {}
 
 
 	-- General functions --
@@ -389,7 +402,7 @@ function QuickChat:CreatePing(ping_type)
 	local contextual = params.contextual 
 	
 	
-	local ray = World:raycast("ray",cam_pos,to_pos,"slot_mask",params.slot_mask)
+	local ray = World:raycast("ray",cam_pos,to_pos,"slot_mask",params.slotmask)
 	local hit_unit = ray and ray.unit
 	local hit_position = ray and ray.position
 	if not (hit_unit or hit_position) then 
@@ -439,6 +452,7 @@ function QuickChat:CreatePing(ping_type)
 	--create waypoint panel here
 	--if timer is enabled (if modifier key is held), or if waypoint data forces timer, instigate timer
 	if self:AddWaypoint(waypoint_data) then
+		self:RegisterWaypoint(params.id,waypoint_data)
 --		self:SyncWaypointToPeers(waypoint_data)
 	end
 end
@@ -449,15 +463,15 @@ function QuickChat:AddWaypoint(waypoint_data)
 		--create panel for waypoint, and all the bits
 		
 		local panel = parent_panel:panel({
-			name = params.id
+			name = waypoint_data.id
 		})
 		waypoint_data._panel = panel
 		waypoint_data._bitmap = panel:bitmap({
 			name = "bitmap",
-			texture = params.texture,
-			texture_rect = params.texture_rect,
-			w = params.w,
-			h = params.h,
+			texture = waypoint_data.texture,
+			texture_rect = waypoint_data.texture_rect,
+			w = waypoint_data.w,
+			h = waypoint_data.h,
 			layer = 2
 		})
 		
@@ -478,8 +492,8 @@ function QuickChat:AddWaypoint(waypoint_data)
 		if do_workspace then
 			local w = 100
 			local h = 600
-			local world_w = w * 0.01
-			local world_h = h * 0.01
+			local world_w = w * 0.1
+			local world_h = h * 0.1
 			local ws = self._gui:create_world_workspace(world_w,world_h,Vector3(0,0,0),Vector3(world_w,0,0),Vector3(0,world_h,0))
 			ws:set_billboard(Workspace.BILLBOARD_BOTH)
 			ws:panel():rect({
@@ -498,13 +512,14 @@ function QuickChat:AddWaypoint(waypoint_data)
 			local hit_unit = waypoint_data.hit_unit
 			local attachment_obj = hit_unit:get_object(Idstring("Head"))
 			local oobb = attachment_obj:oobb()
-			local x_axis = rot:x():normalized() * params.world_w
-			local y_axis = rot:z():normalized() * params.world_h
+			local x_axis = rot:x():normalized() * world_w
+			local y_axis = rot:z():normalized() * world_h
 			local top_left = oobb:center() + Vector3(0,0,position_offset_z) + position_offset - (x_axis / 2)
 			ws:set_linked(world_w,world_h,attachment_obj,top_left,x_axis,y_axis)
 			
 			waypoint_data._workspace = ws
 		end
+		return waypoint_data
 	end
 	
 	return false
@@ -515,6 +530,10 @@ function QuickChat:RemoveWaypoint(user,index)
 	if waypoint then 
 		self:FadeoutWaypoint(waypoint)
 	end
+end
+
+function QuickChat:RegisterWaypoint(id,waypoint_data)
+	self.active_waypoints[id] = waypoint_data
 end
 
 function QuickChat:UnregisterWaypoint(user,index)
