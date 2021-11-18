@@ -1,6 +1,13 @@
 {
 	"menu_missing_rmm_prompt_title" : "Missing RadialMouseMenu!",
 	"menu_missing_rmm_prompt_desc" : "Your installation of RadialMouseMenu is either missing or installed incorrectly! Please visit the mod page for more information: https://modworkshop.net/mod/27225",
+	
+	"menu_ping_pickup_label" : "Pick Up",
+	"menu_ping_interact_label" : "Interact",
+	"menu_ping_attack_label" : "Attack",
+	"menu_ping_look_label" : "Look",
+	
+	
 	"pingmenu_mainmenu_title" : "Ping Menu",
 	"pingmenu_mainmenu_desc" : "Ping Menu mod options",
 	"pingmenu_show_title" : "Show Ping Menu",
