@@ -74,10 +74,13 @@ QuickChat.radial_menu_object_template = {
 	name = "PingMenu",
 	radius = 200,
 	deadzone = 50,
-	items = {}
+	items = {},
+	allow_camera_look = false,
+	block_all_input = false,
+	allow_keyboard_input = true
 }
 QuickChat.radial_menu_item_template = {
-	text = "Lookie Here!",
+	text = "Foo Bar!",
 	icon = {
 		texture = tweak_data.hud_icons.wp_standard.texture,
 		texture_rect = tweak_data.hud_icons.wp_standard.texture_rect,
@@ -87,10 +90,11 @@ QuickChat.radial_menu_item_template = {
 		alpha = 0.7,
 		color = Color.red
 	},
-	callback = callback(QuickChat,QuickChat,"create_ping","Ping_LookieHere"),
+--	callback = function() end, --callback(QuickChat,QuickChat,"create_ping","Ping_LookieHere"),
 	show_text = false,
 	stay_open = false
 }
+--QuickChat.radial_menu_data = {} --for reference
 
 QuickChat.tweak_data = {
 	current_network_message = "QuickChat_v1_Add",
@@ -106,6 +110,7 @@ QuickChat.tweak_data = {
 			color = Color(0,1,1),
 			icon_id = "wp_standard",
 			effect = "default",
+			contextual = true,
 			show_distance = true,
 			cast_targets = {
 				enemies = true,
@@ -129,7 +134,7 @@ QuickChat.tweak_data = {
 				interactable = true,
 				deployables = false
 			}
-		}
+		},
 		pickup = {
 			id = "pickup",
 			color = Color(1,0.2,0),
@@ -157,7 +162,7 @@ QuickChat.tweak_data = {
 	max_raycast_distance = 10000, --100 meters
 	premade_text_messages = {
 		text_pickup = "menu_pickup", --get this thing!
-		text_interact = "menu_interact" --use this thing!
+		text_interact = "menu_interact", --use this thing!
 		text_attack = "menu_attack", --attack this thing!
 		text_look = "menu_look" --look at this thing!
 	},
@@ -221,7 +226,15 @@ QuickChat.active_radial_menus = {}
 
 	-- General functions --
 
+function QuickChat:log(...)
+	if _G.Log then 
+		return _G.Log(...)
+	end
+	return log(...)
+end
+
 function QuickChat:OnLoad()
+	self._gui = self._gui or World:newgui()
 	local td = self.tweak_data
 
 		--populate cast slotmasks
@@ -265,23 +278,67 @@ function QuickChat:OnLoad()
 			end
 		end
 		self.waypoints[k] = {
-			name = v.id
+			id = v.id,
 			text = managers.localization:text(td.premade_text_messages[tostring(v.text_id)]),
 			color = v.color,
 			texture = texture,
 			texture_rect = texture_rect,
 			effect = v.effect,
-			slotmask = slotmask
+			slotmask = slotmask,
+			contextual = v.contextual
 		}
 	end
 	
 		--process user-made waypoints (todo)
 			--is_localized flag
+			
 	
+	
+	--generate radial menu data (creation comes later)
+	local radial_menu_data = table.deep_map_copy(self.radial_menu_object_template)
+	
+	table.insert(radial_menu_data.items,self:GenerateRadialItem("generic"))
+	table.insert(radial_menu_data.items,self:GenerateRadialItem("attack"))
+	table.insert(radial_menu_data.items,self:GenerateRadialItem("pickup"))
+	
+	self.radial_menu_data = radial_menu_data
 end
 
+Hooks:Add("BaseNetworkSessionOnLoadComplete","quickchat_add_updater",function()
+	if managers.hud then 
+		managers.hud:add_updator("quickchat_pingmenu_update",callback(QuickChat,QuickChat,"Update"))
+	else
+		QuickChat:log("ERROR: No hudmanager exists")
+	end
+end)
+
 function QuickChat:Update(t,dt)
-	
+	local ping_menu = self.active_radial_menus.ping_menu
+	if ping_menu then 
+		local held = HoldTheKey:Key_Held("m")
+		if held and not self.input_cache then 
+			ping_menu:Show()
+		elseif self.input_cache and not held then 
+			ping_menu:Hide()
+		end
+		self.input_cache = held
+	end
+end
+
+function QuickChat:GenerateRadialItem(id)
+	local template_data = self.waypoints[id]
+	local new_item 
+	if template_data then 
+		new_item = table.deep_map_copy(self.radial_menu_item_template)
+		new_item.text = template_data.text
+		new_item.texture = template_data.texture
+		new_item.texture_rect = template_data.texture_rect
+		new_item.w = template_data.w
+		new_item.h = template_data.h
+		new_item.color = template_data.color
+		new_item.callback = callback(self,self,"CreatePing",id)
+	end
+	return new_item
 end
 
 function QuickChat:SetRadialMenu(id,menu)
@@ -307,7 +364,12 @@ end
 	-- Ping creation --
 	
 --called when the user presses the ping button
+--[[
+	dofile("mods/PD2-QuickChat/lua/hooks/menumanager.lua")
+--]]
+
 function QuickChat:CreatePing(ping_type)
+	self:log(tostring(ping_type))
 	local params = ping_type and self.waypoints[ping_type]
 	if not params then 
 		self:log("ERROR: Bad ping_type: QuickChat:CreatePing(" .. tostring(ping_type) .. ")")
@@ -324,12 +386,21 @@ function QuickChat:CreatePing(ping_type)
 	local cam_aim = viewport_cam:rotation():y()
 	local to_pos = (cam_aim * self.tweak_data.max_raycast_distance) + cam_pos
 	
+	local contextual = params.contextual 
+	
+	
 	local ray = World:raycast("ray",cam_pos,to_pos,"slot_mask",params.slot_mask)
-	local hit_unit = ray and ray.hit_unit
+	local hit_unit = ray and ray.unit
 	local hit_position = ray and ray.position
 	if not (hit_unit or hit_position) then 
+		self:log("No unit found!")
 		return
 	end
+	
+	if contextual then 
+		--autotarget/icon here
+	end
+	
 	if false and params.effect then 
 		local effect_position = Vector3()
 		
@@ -338,10 +409,11 @@ function QuickChat:CreatePing(ping_type)
 		local use_ray_normal = params.effect.use_ray_normal
 		local use_hit_position = params.effect.use_hit_position
 		local effect_lifetime = params.effect.lifetime
+		local effect_rotation = params.effect.rotation
 		local effect = World:effect_manager():spawn({
 			parent = parent_object,
 			position = effect_position,
-			rotation = Rotation(0,0,-90)
+			rotation = effect_rotation or Rotation(0,0,-90)
 		})
 		if effect_lifetime then 
 			DelayedCallbacks:Add("effect_" .. tostring(unit:key()),effect_lifetime,function()
@@ -360,23 +432,79 @@ function QuickChat:CreatePing(ping_type)
 		self:PlayViewmodelAnimation(params.anim)
 	end
 	
-	local waypoint_data = {
-		ping_type = ping_type,
-		hit_unit = hit_unit
-	}
+	local waypoint_data = table.deep_map_copy(params)
+	waypoint_data.ping_type = ping_type
+	waypoint_data.hit_unit = hit_unit
 	
 	--create waypoint panel here
 	--if timer is enabled (if modifier key is held), or if waypoint data forces timer, instigate timer
 	if self:AddWaypoint(waypoint_data) then
-		self:SyncWaypointToPeers(waypoint_data)
+--		self:SyncWaypointToPeers(waypoint_data)
 	end
 end
 	
 function QuickChat:AddWaypoint(waypoint_data)
-	local parent_panel
+	local parent_panel = managers.hud._workspace:panel()
 	if alive(parent_panel) then 
 		--create panel for waypoint, and all the bits
 		
+		local panel = parent_panel:panel({
+			name = params.id
+		})
+		waypoint_data._panel = panel
+		waypoint_data._bitmap = panel:bitmap({
+			name = "bitmap",
+			texture = params.texture,
+			texture_rect = params.texture_rect,
+			w = params.w,
+			h = params.h,
+			layer = 2
+		})
+		
+		waypoint_data._text = panel:text({
+			name = "text",
+			text = tostring(waypoint_data.text),
+			align = "center",
+	--		x = -100,
+	--		y = -100,
+			font = "fonts/font_medium_shadow_mf",
+			font_size = 24,
+			alpha = 0.8,
+			layer = 3,
+			color = Color.white
+		})
+		
+		local do_workspace = true
+		if do_workspace then
+			local w = 100
+			local h = 600
+			local world_w = w * 0.01
+			local world_h = h * 0.01
+			local ws = self._gui:create_world_workspace(world_w,world_h,Vector3(0,0,0),Vector3(world_w,0,0),Vector3(0,world_h,0))
+			ws:set_billboard(Workspace.BILLBOARD_BOTH)
+			ws:panel():rect({
+				name = "debug",
+				color = Color.red,
+				alpha = 0.5
+			})
+			
+			local position_offset_x = 0
+			local position_offset_y = 0
+			local position_offset_z = 0
+			local rot = managers.viewport:get_current_camera():rotation()
+			local rot_nopitch = Rotation(rot:yaw(),0,rot:pitch())
+			local position_offset = Vector3(position_offset_x,position_offset_y,0)
+			mvec3_rot(position_offset,rot_nopitch)
+			local hit_unit = waypoint_data.hit_unit
+			local attachment_obj = hit_unit:get_object(Idstring("Head"))
+			local oobb = attachment_obj:oobb()
+			local x_axis = rot:x():normalized() * params.world_w
+			local y_axis = rot:z():normalized() * params.world_h
+			local top_left = oobb:center() + Vector3(0,0,position_offset_z) + position_offset - (x_axis / 2)
+			ws:set_linked(world_w,world_h,attachment_obj,top_left,x_axis,y_axis)
+			
+			waypoint_data._workspace = ws
+		end
 	end
 	
 	return false
@@ -397,6 +525,7 @@ end
 
 function QuickChat:FadeoutWaypoint(waypoint_data)
 	local function cb_destroy(o)
+		waypoint_data._panel = nil
 		o:remove()
 	end
 	local function fadeout_func(o)
@@ -406,8 +535,12 @@ function QuickChat:FadeoutWaypoint(waypoint_data)
 			o:set_alpha(n * n)
 		end)
 	end
-	if waypoint_data.panel then 
-		waypoint_data.panel:animate(fadeout_func)
+	if waypoint_data._panel then 
+		waypoint_data._panel:animate(fadeout_func)
+	end
+	if waypoint._workspace then 
+		self._gui:destroy_workspace(waypoint.workspace)
+		waypoint._workspace = nil
 	end
 end
 
@@ -440,7 +573,6 @@ function QuickChat:FindTargetUnit(id,mask)
 	for _,unit in pairs(World:find_units_quick("all", mask)) do
 		if unit:id() == id then
 			return unit
-			break
 		end
 	end
 end
@@ -574,9 +706,10 @@ Hooks:Add("MenuManagerInitialize", "MenuManagerInitialize_QuickChat", function(m
 	end
 
 	QuickChat:Load()
+	QuickChat:OnLoad()
 	--after all user waypoints are loaded, 
 	--generate the radial menu by combining the template and the selected waypoints data
-	
+	local radial_menu_data = QuickChat.radial_menu_data
 	RadialMouseMenu:new(radial_menu_data,callback(QuickChat,QuickChat,"SetRadialMenu","ping_menu"))
 	
 --	MenuHelper:LoadFromJsonFile(QuickChat._menu_path .. "menu/options.txt", QuickChat, QuickChat.settings)		
