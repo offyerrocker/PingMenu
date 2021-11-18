@@ -6,7 +6,7 @@
 todo: 
 	offscreen waypoint position updating
 	glowing circle for positional markers (spotlight + circle graphic) 
-	
+	icon/panel centering when updating
 	conceptually resolve desync issue
 	
 	
@@ -821,10 +821,10 @@ function QuickChat:AddWaypoint(creation_data)
 			--]]
 			local hit_unit = creation_data.unit
 			if hit_unit then 
-				local oobb = attachment_obj:oobb()
 				local head_obj = hit_unit:get_object(Idstring("Head"))
 				if creation_data.is_character and head_obj then 
 					local attachment_obj = head_obj or hit_unit:orientation_object()
+					local oobb = attachment_obj:oobb()
 					ws:set_linked(world_w,world_h,attachment_obj,oobb:center() + Vector3(0,0,10),Vector3(world_w,0,0),Vector3(0,world_h,0))
 				else
 					local attachment_obj = hit_unit:orientation_object()
