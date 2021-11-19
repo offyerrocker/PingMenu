@@ -6,7 +6,14 @@
 	"menu_ping_interact_label" : "Interact",
 	"menu_ping_attack_label" : "Attack",
 	"menu_ping_look_label" : "Look",
-	
+	"menu_ping_category_interactable" : "Mission Item",
+	"menu_ping_category_ally_downed" : "Downed Teammate",
+	"menu_ping_category_enemy" : "Enemy",
+	"menu_ping_category_hostage" : "Hostage",
+	"menu_ping_category_civilian" : "Civilian",
+	"menu_ping_category_corpse" : "Corpse",
+	"menu_ping_category_deployable" : "Deployable",
+	"menu_ping_hostage_vip" : "VIP",
 	
 	"pingmenu_mainmenu_title" : "Ping Menu",
 	"pingmenu_mainmenu_desc" : "Ping Menu mod options",

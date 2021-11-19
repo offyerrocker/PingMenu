@@ -8,8 +8,10 @@ todo:
 	glowing circle for positional markers (spotlight + circle graphic) 
 	icon/panel centering when updating
 	conceptually resolve desync issue
-	
-	
+	-case-specific ping types for contextual pings
+	-optional "[You] pinged [object]" message in local chat
+
+
 --closed captions compatibility?
 --hold button to switch to n-second timer?
 --timer icon should be separate from normal icon
@@ -22,6 +24,36 @@ todo:
 --slow remove while still updating positions (low priority)
 
 
+--specific voiceline cases:
+--jammed drill
+--keycard (v10)
+--crowbar
+--door (v15/16)
+--shoot camera g25
+--camera mark (f39_any)
+--guard mark (f37_any)
+--civilian (watch the civilians g27 / use cable ties g26)
+--loot bag with legs (p31)
+--(move) loot bag (v51)
+--special marking?
+--hostage trade p07
+--escape zone (there's our ride v26 / we gotta get out g07)
+--vehicle v26
+--flashbang g41x_any
+
+--general voicelines:
+--attack (v49 shoot it down, fire at it / )
+--go (come with me p20 / hurry g06 / inspire basic g18 / right way g12 / let's go g13 / move p14 / get moving p15 / MOVE p16 / follow me f38_any / time to go g17)
+--search (search the place v38 / keep looking v44 )
+--wait (f48x_any p04)
+--defend g16
+
+
+anims:
+cmd_come
+cmd_point
+cmd_down
+cmd_gogo
 
 schema:
 --radial menus can have the following attributes:
@@ -81,15 +113,15 @@ QuickChat._network_data = {
 
 QuickChat.default_settings = {
 	debug_log_enabled = true,
-	max_pings_per_player = 2,
+	max_pings_per_player = 3,
 	waypoint_fadeout_duration = 1
 }
 QuickChat.settings = QuickChat.settings or table.deep_map_copy(QuickChat.default_settings)
 
 QuickChat.radial_menu_object_template = {
 	name = "PingMenu",
-	radius = 200,
-	deadzone = 50,
+	radius = 600,
+	deadzone = 100,
 	items = {},
 	allow_camera_look = false,
 	block_all_input = false,
@@ -129,8 +161,12 @@ QuickChat.tweak_data = QuickChat.tweak_data or {
 			icon_id = "wp_standard",
 			icon_type = 1, --1 = hudiconstweakdata, 2 = premade
 			effect = "default",
+			sound_id = "g15",
+			anim_id = "cmd_point",
 			contextual = true,
 			show_distance = true,
+			show_timer = false,
+			use_timer = false,
 			cast_targets = {
 				enemies = true,
 				civilians = true,
@@ -146,7 +182,11 @@ QuickChat.tweak_data = QuickChat.tweak_data or {
 			icon_id = "pd2_kill",
 			icon_type = 1,
 			effect = "default",
+			sound_id = "g23", --"shoot em!" or "v18" for "wipe em out/clear the room"
+			anim_id = "cmd_point",
 			show_distance = true,
+			show_timer = false,
+			use_timer = false,
 			cast_targets = {
 				enemies = true,
 				civilians = true,
@@ -169,7 +209,11 @@ QuickChat.tweak_data = QuickChat.tweak_data or {
 				50
 			},
 			effect = "default",
+			sound_id = "v04", --"found it, it's here"
+			anim_id = "cmd_point",
 			show_distance = true,
+			show_timer = false,
+			use_timer = false,
 			cast_targets = {
 				enemies = true,
 				civilians = true,
@@ -185,7 +229,11 @@ QuickChat.tweak_data = QuickChat.tweak_data or {
 			icon_id = "equipment_doctor_bag",
 			icon_type = 1,
 			effect = "default",
+			sound_id = "v44",
+			anim_id = "cmd_point",
 			show_distance = true,
+			show_timer = false,
+			use_timer = false,
 			cast_targets = {
 				enemies = true,
 				civilians = true,
@@ -196,6 +244,68 @@ QuickChat.tweak_data = QuickChat.tweak_data or {
 		}
 	},
 	max_raycast_distance = 10000, --100 meters
+	contextual_interactions = {
+		revive = {
+			target_category = "menu_ping_category_ally_downed",
+			target_name = "Ally" --overridden, special behavior case
+		},
+		hostage_skm = {
+			target_category = "menu_ping_category_hostage",
+			target_name = "menu_ping_hostage_vip"
+		},
+		hostage_trade = {
+			target_category = "menu_ping_category_hostage",
+			target_name = "menu_ping_hostage_vip"
+		},
+		hostage_move = {
+			target_category = "menu_ping_category_hostage",
+			target_name = "menu_ping_hostage_vip"
+		},
+		hostage_stay = {
+			target_category = "menu_ping_category_hostage",
+			target_name = "menu_ping_hostage_vip"
+		},
+		trip_mine = {
+			target_category = "menu_ping_category_deployable",
+			target_name = "debug_trip_mine"
+		},
+		sentry_gun_refill = {
+			target_category = "menu_ping_category_deployable",
+			target_name = "debug_sentry_gun"
+		},
+		sentry_gun_revive = {
+			target_category = "menu_ping_category_deployable",
+			target_name = "debug_sentry_gun"
+		},
+		sentry_gun = {
+			target_category = "menu_ping_category_deployable",
+			target_name = "debug_sentry_gun"
+		},
+		sentry_gun_fire_mode = {
+			target_category = "menu_ping_category_deployable",
+			target_name = "debug_sentry_gun"
+		},
+		bodybags_bag = {
+			target_category = "menu_ping_category_deployable",
+			target_name = "debug_sentry_gun"
+		},
+		grenade_crate = {
+			target_category = "menu_ping_category_deployable",
+			target_name = "debug_grenade_crate"
+		},
+		ammo_bag = {
+			target_category = "menu_ping_category_deployable",
+			target_name = "debug_ammo_bag"
+		},
+		doctor_bag = {
+			target_category = "menu_ping_category_deployable",
+			target_name = "debug_doctor_bag"
+		},
+		ecm_jammer = {
+			target_category = "menu_ping_category_deployable",
+			target_name = "debug_ecm_jammer"
+		}
+	},
 	premade_text_messages = {
 		text_pickup = "menu_ping_pickup_label", --get this thing!
 		text_interact = "menu_ping_interact_label", --use this thing!
@@ -342,7 +452,14 @@ function QuickChat:PopulateDefaultWaypointData()
 			texture_rect = texture_rect,
 			effect = v.effect,
 			slotmask = slotmask,
-			contextual = v.contextual
+			contextual = v.contextual,
+			icon_id = v.icon_id,
+			icon_type = v.icon_type,
+			sound_id = v.sound_id,
+			show_distance = v.show_distance,
+			show_timer = v.show_timer,
+			use_timer = v.use_timer,
+			anim_id = v.anim_id
 		}
 	end
 end
@@ -369,11 +486,13 @@ function QuickChat:GenerateRadialItem(id)
 	if template_data then 
 		new_item = table.deep_map_copy(self.radial_menu_item_template)
 		new_item.text = template_data.text
-		new_item.texture = template_data.texture
-		new_item.texture_rect = template_data.texture_rect
-		new_item.w = template_data.w
-		new_item.h = template_data.h
-		new_item.color = template_data.color
+		new_item.icon = {
+			texture = template_data.texture,
+			texture_rect = template_data.texture_rect,
+			w = template_data.w,
+			h = template_data.h,
+			color = template_data.color
+		}
 		new_item.callback = callback(self,self,"CreatePing",id)
 	end
 	return new_item
@@ -381,6 +500,36 @@ end
 
 function QuickChat:SetRadialMenu(id,menu)
 	self.active_radial_menus[id] = menu
+	menu.Hide = function(self,skip_reset,do_success_cb)
+		if not skip_reset then 
+			RadialMouseMenu.current_menu = nil
+		end
+		self._hud:hide()
+	--	RadialMouseMenu._WS:disconnect_keyboard()
+		if self.block_all_input then 
+			game_state_machine:_set_controller_enabled(true)
+		end
+		local item = self._selected and self._items[self._selected]
+		self._selected = false
+		if self._active then 
+			self._active = false
+			self._selector:set_visible(false)
+			local player = managers.player and managers.player:local_player()
+			if alive(player) then 
+				player:movement():current_state()._menu_closed_fire_cooldown = player:movement():current_state()._menu_closed_fire_cooldown + 0.01
+			end
+			self:on_closed()
+			managers.mouse_pointer:remove_mouse(RadialMouseMenu.MOUSE_ID)
+			if do_success_cb then 
+				if item then 
+					self:on_item_clicked(item,true) --already hiding here so skip_hide 
+				else
+					QuickChat:CreatePing("generic")
+				end
+			end
+		end
+	end
+	
 end
 
 function QuickChat:OnLoad()
@@ -414,7 +563,7 @@ function QuickChat:UpdateInput(t,dt)
 		if held and not self.input_cache then 
 			ping_menu:Show()
 		elseif self.input_cache and not held then 
-			ping_menu:Hide()
+			ping_menu:Hide(nil,true)
 		end
 		self.input_cache = held
 	end
@@ -585,8 +734,13 @@ function QuickChat:CreatePing(ping_type)
 		return
 	end
 	
+	
+	local target_name
+	local target_category
 	local is_character
 	local is_dead
+	local sound_id
+	local anim_id
 	
 	local unit
 	
@@ -618,19 +772,40 @@ function QuickChat:CreatePing(ping_type)
 
 		unit = find_character(hit_unit,true) or unit
 		
+		
 		--search for interactable objects
 		local interaction_ext = hit_unit.interaction and hit_unit:interaction()
 		if interaction_ext then 
 			if not interaction_ext._disabled and interaction_ext._active then 
 				unit = hit_unit or unit
-			
-				params = self.waypoint_parameters.interactable
+				local interaction_tweak_id = interaction_ext.tweak_data
+				local contextual_interaction_data = interaction_tweak_id and self.tweak_data.contextual_interactions[interaction_tweak_id]
+
+				
+				target_category = managers.localization:text("menu_ping_category_interactable")
+				params = self.waypoint_parameters.interact
+				if contextual_interaction_data then 
+					local interaction_tweak_data = tweak_data.interaction[interaction_tweak_id]
+					sound_id = contextual_interaction_data.sound_id
+					anim_id = contextual_interaction_data.anim_id
+					
+					target_name = (interaction_tweak_data.text_id and managers.localization:text(interaction_tweak_data.text_id)) or (contextual_interaction_data.target_name and managers.localization:text(contextual_interaction_data.target_name)) or target_name
+					target_category = contextual_interaction_data.target_category and managers.localization:text(contextual_interaction_data.target_category) or target_category
+					
+					if contextual_interaction_data.ping_type then
+						params = self.tweak_data.waypoint_parameters[contextual_interaction_data.ping_type] or params
+					end
+				end
 			end
 		end
 		
 		if unit and unit:in_slot(self.cast_slotmasks.pickups) then 
 			params = self.waypoint_parameters.pickups
 		end
+--		if unit and unit:base() and getmetatable(unit:base()) == Pickup then 
+			--it's a pickup! pick it up!
+			
+--		end
 		
 		--autotarget/icon here
 	elseif not hit_unit:in_slot(managers.slot._masks.world_geometry) then
@@ -679,12 +854,22 @@ function QuickChat:CreatePing(ping_type)
 	panel_params.position = hit_position
 	panel_params.is_character = is_character
 	
-	if params.sound then 
-		self:PlayCriminalSound(params.sound,true)
+	if params.sound_id and not sound_id then 
+		if type(params.sound_id) == "table" then 
+			sound_id = table.random(params.sound_id)
+		elseif type(params.sound_id) == "string" then 
+			sound_id = params.sound_id
+		end
+	end
+	if sound_id then 
+		self:PlayCriminalSound(sound_id,true)
+	end
+	if params.anim_id and not anim_id then 
+		anim_id = params.anim_id
 	end
 	
-	if params.anim then 
-		self:PlayViewmodelAnimation(params.anim)
+	if anim_id then 
+		self:PlayViewmodelAnimation(anim_id)
 	end
 	
 	if false and params.effect then --not yet implemented
@@ -714,6 +899,8 @@ function QuickChat:CreatePing(ping_type)
 	--if timer is enabled (if modifier key is held), or if waypoint data forces timer, instigate timer?
 	local output_data =	self:AddWaypoint(panel_params)
 	
+	self:log("You pinged " .. tostring(target_category) .. " - " .. tostring(target_name))
+	
 	if output_data then
 		self.num_waypoints = self.num_waypoints + 1 --increment unique waypoint num
 		output_data.destroy_id = self.num_waypoints
@@ -722,6 +909,12 @@ function QuickChat:CreatePing(ping_type)
 		output_data.position = hit_position
 		output_data.is_character = is_character
 		output_data.is_dead = output_data.is_dead
+		output_data.target_name = target_name
+		output_data.target_category = target_category
+		
+		if #self.active_waypoints[self.USER_ID] > self:GetMaxPingsPerPlayer() then 
+			self:RemoveWaypoint(self.USER_ID,#self.active_waypoints[self.USER_ID])
+		end
 		
 		self:RegisterWaypoint(output_data)
 		
@@ -850,7 +1043,7 @@ end
 
 --register user waypoint
 function QuickChat:RegisterWaypoint(waypoint_data)
-	table.insert(self.active_waypoints[self.USER_ID],waypoint_data)
+	table.insert(self.active_waypoints[self.USER_ID],1,waypoint_data)
 end
 
 function QuickChat:UnregisterWaypoint(id64,index)
@@ -899,7 +1092,7 @@ function QuickChat:ReceiveWaypoint(peer,ping_data)
 	end
 	local waypoint_data = self:AddWaypoint(waypoint_data)
 	if waypoint_data then 
-		table.insert(self.active_waypoints[id64],waypoint_data)
+		table.insert(self.active_waypoints[id64],1,waypoint_data)
 	end
 end
 
@@ -926,6 +1119,7 @@ function QuickChat:ClearAllWaypoints()
 		end
 	end
 end
+
 
 	-- Network/syncing --
 
@@ -1064,6 +1258,18 @@ Hooks:Add("MenuManagerInitialize", "MenuManagerInitialize_QuickChat", function(m
 	
 --	QuickChat.chat_radial = RadialMouseMenu:new(QuickChat._chat_radial_data,callback(QuickChat,QuickChat,"set_chat_radial_menu")) or QuickChat.chat_radial
 	
+	MenuCallbackHandler.callback_quickchat_setting_max_pings_per_player = function(self,item) --not yet implemented
+		local value = tonumber(item:value())
+		for user_id,waypoints_list in pairs(QuickChat.active_waypoints) do 
+			if value < #QuickChat.active_waypoints then
+				for i=#waypoints_list,#waypoints_list-value,-1 do 
+					QuickChat:RemoveWaypoint(user_id,i)
+				end
+			end
+		end
+		
+	end
+	
 	MenuCallbackHandler.callback_quickchat_mainmenu_close = function(self)
 		QuickChat:Save()
 	end
@@ -1078,12 +1284,14 @@ Hooks:Add("MenuManagerInitialize", "MenuManagerInitialize_QuickChat", function(m
 --	MenuHelper:LoadFromJsonFile(QuickChat._menu_path .. "menu/options.txt", QuickChat, QuickChat.settings)		
 end)
 
+
 	-- Localization (if BeardLib is installed, defers to BeardLib Localization Module) --
 Hooks:Add("LocalizationManagerPostInit", "LocalizationManagerPostInit_QuickChat", function( loc )
 	if not BeardLib then 
 		loc:load_localization_file( QuickChat._localization_path .. "english.txt")
 	end
 end)	
+
 
 	-- I/O --
 
