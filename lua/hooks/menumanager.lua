@@ -5,29 +5,33 @@
 	
 todo: 
 	offscreen waypoint position updating
-	glowing circle for positional markers (spotlight + circle graphic) 
+	glowing circle for positional markers (spotlight + circle graphic aligned against normal dir; repurpose waypoint)
+	create dummy unit or glow effect for waypoint beacon shaft
 	icon/panel centering when updating
 	conceptually resolve desync issue
 	-case-specific ping types for contextual pings
 	-optional "[You] pinged [object]" message in local chat
 
-
+--radial menu
+	--custom radial menu graphics
+	--adjust position of text
+	--adjust size
 --closed captions compatibility?
+--customization
+	--edit action radials
+	--add and custom keybind N number of action radials in menu?
+--menu to manually clear waypoints from any or all player(s)
 --hold button to switch to n-second timer?
 --timer icon should be separate from normal icon
---edit action radials
---add and custom keybind N number of action radials in menu?
---re-check peerid on peer list changed
---requires radial mouse menu (show popup if missing)
+--register to peers on connected
 --don't bother filtering naughty words. anyone who wanted to cuss or toss epithets around could just use chat anyhow
---menu to manually clear waypoints from any or all player(s)
---slow remove while still updating positions (low priority)
+--slow fade remove while still updating positions (low priority)
 
 
 --specific voiceline cases:
 --jammed drill
 --keycard (v10)
---crowbar
+--crowbar (v57)
 --door (v15/16)
 --shoot camera g25
 --camera mark (f39_any)
@@ -163,6 +167,7 @@ QuickChat.tweak_data = QuickChat.tweak_data or {
 			effect = "default",
 			sound_id = "g15",
 			anim_id = "cmd_point",
+			create_ping = true,
 			contextual = true,
 			show_distance = true,
 			show_timer = false,
@@ -184,6 +189,7 @@ QuickChat.tweak_data = QuickChat.tweak_data or {
 			effect = "default",
 			sound_id = "g23", --"shoot em!" or "v18" for "wipe em out/clear the room"
 			anim_id = "cmd_point",
+			create_ping = true,
 			show_distance = true,
 			show_timer = false,
 			use_timer = false,
@@ -211,6 +217,7 @@ QuickChat.tweak_data = QuickChat.tweak_data or {
 			effect = "default",
 			sound_id = "v04", --"found it, it's here"
 			anim_id = "cmd_point",
+			create_ping = true,
 			show_distance = true,
 			show_timer = false,
 			use_timer = false,
@@ -231,6 +238,7 @@ QuickChat.tweak_data = QuickChat.tweak_data or {
 			effect = "default",
 			sound_id = "v44",
 			anim_id = "cmd_point",
+			create_ping = true,
 			show_distance = true,
 			show_timer = false,
 			use_timer = false,
@@ -456,6 +464,7 @@ function QuickChat:PopulateDefaultWaypointData()
 			icon_id = v.icon_id,
 			icon_type = v.icon_type,
 			sound_id = v.sound_id,
+			create_ping = v.create_ping,
 			show_distance = v.show_distance,
 			show_timer = v.show_timer,
 			use_timer = v.use_timer,
@@ -712,6 +721,9 @@ function QuickChat:CreatePing(ping_type)
 	local params = ping_type and self.waypoint_parameters[ping_type]
 	if not params then 
 		self:log("ERROR: Bad ping_type: QuickChat:CreatePing(" .. tostring(ping_type) .. ")")
+		return
+	end
+	if not params.create_ping then 
 		return
 	end
 	local viewport_cam = managers.viewport:get_current_camera()
