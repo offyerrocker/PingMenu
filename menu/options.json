@@ -1,0 +1,47 @@
+{
+	"menu_id" : "menu_pingwaypoint",
+	"parent_menu_id" : "blt_options",
+	"title" : "menu_pingwaypoint_mainmenu_title",
+	"back_callback" : "",
+	"items" : [
+		{
+			"type" : "toggle",
+			"id" : "pingwaypoint_debug_id",
+			"title" : "menu_pingwaypoint_debug_title",
+			"description" : "menu_pingwaypoint_debug_desc",
+			"callback" : "callback_pingwaypoint_debug",
+			"value" : "debug_log_enabled"
+		},
+		{
+			"type" : "divider",
+			"size" : 24
+		},
+		{
+			"type" : "keybind",
+			"id" : "pingwaypoint_keybind_ping_id",
+			"title" : "menu_pingwaypoint_keybind_ping_title",
+			"description" : "menu_pingwaypoint_keybind_ping_desc",
+			"keybind_id" : "pingwaypoint_keybind_ping",
+			"run_in_game" : true,
+			"run_in_menu" : false,
+			"func" : "func_pingwaypoint_keybind_ping"
+		},
+		{
+			"type" : "divider",
+			"size" : 24
+		},
+		{
+			"type" : "slider",
+			"id" : "pingwaypoint_max_pings_per_player_id",
+			"title" : "menu_pingwaypoint_max_pings_per_player_title",
+			"description" : "menu_pingwaypoint_max_pings_per_player_desc",
+			"callback" : "callback_pingwaypoint_max_pings_per_player",
+			"value" : "max_pings_per_player",
+			"default_value" : 3,
+			"min" : 0,
+			"max" : 5,
+			"step" : 1
+		}
+	]
+
+}

@@ -4,8 +4,11 @@
 
 	
 todo: 
+	- sync existing waypoints to mid-game joins
 	-resolve wall-ping behavior
 		glowing circle for positional markers (spotlight + circle graphic aligned against normal dir; repurpose waypoint)
+	
+	"static" waypoints are created as an offset from the unit, for world collision waypoints
 	vertical waypoint offset (by screen instead of by world)
 	offscreen waypoint position updating
 	prevent ADS when exiting radial menu with rightclick
@@ -86,6 +89,123 @@ schema:
 	8 String [encoded position vector3]
 --	9 String [encoded normal vector3]?
 	9 Integer [owner-authoritative waypoint id for remote destroy]
+	
+	
+	
+	
+	
+	
+	
+	local viewport_cam = managers.viewport:get_current_camera()
+	local cam_pos = viewport_cam:position()
+	local cam_aim = viewport_cam:rotation():y()
+	local to_pos = (cam_aim * QuickChat.tweak_data.max_raycast_distance) + cam_pos
+	
+	local ray = World:raycast("ray",cam_pos,to_pos,"slot_mask",QuickChat.cast_slotmasks.generic + QuickChat.cast_slotmasks.generic)
+	logall(ray)
+	local is_geometry = ray.unit:in_slot(managers.slot:get_mask("world_geometry"))
+	
+	
+	---
+	
+	local wp = QuickChat.active_waypoints.local_user[1]
+	wp._light:set_spot_angle_end(30)
+	wp._light:set_far_range(400)	
+	
+	wp._light:set_rotation((0,180,0))
+	
+	return wp._light:set_falloff_exponent(0)
+	
+	wp._light:set_ambient_cube_side(1,Color.red)
+	wp._light:set_ambient_cube_side(2,Color.green)
+	wp._light:set_ambient_cube_side(3,Color.blue)
+	wp._light:set_ambient_cube_side(4,Color(1,1,0))
+	wp._light:set_ambient_cube_side(5,Color(1,0,1))
+	wp._light:set_ambient_cube_side(6,Color(0,1,1))
+	wp._light:set_ambient_cube_side(0,Color(1,0.5,0))
+	
+	
+	
+	wp._light:set_rotation(Rotation(0,45,0))
+	return wp._light:rotation()
+--	wp._light:set_rotation(Rotation(0,0,0))
+--	wp._light:set_position(managers.player:local_player():position())
+	
+	logall(wp)
+	
+	
+	local wp = QuickChat.active_waypoints.local_user[1]
+	wp._light:set_rotation(Rotation(0,0,90))
+	
+	
+	return wp._light:position()
+	
+	
+	wp._light:set_spot_angle_end(90)
+	wp._light:set_far_range(10000)
+	
+	---
+	
+	
+	local texture = "units/lights/spot_light_projection_textures/spotprojection_11_flashlight_df" or "guis/textures/pd2/hud_radialbg"
+	mynewlight = World:create_light("spot|specular|plane_projection", texture)
+	mynewlight:set_color(Color.red)
+	mynewlight:set_spot_angle_end(60)
+	mynewlight:set_far_range(1000)
+	mynewlight:set_multiplier(2)
+	mynewlight:set_rotation(Rotation(0,0,0))
+	mynewlight:set_enable(true)
+--	mynewlight:link(self._a_flashlight_obj)
+	
+	mynewlight:set_position(managers.player:local_player():position() + Vector3(0,0,100))
+	
+	
+	
+	
+	
+	
+		local effect_path = "effects/particles/weapons/flashlight/flashlight_multicolor"
+		mylighteffect = World:effect_manager():spawn({
+			effect = Idstring(mylighteffect)
+		})
+		if mylighteffect and mylighteffect ~= -1 then 
+			local r_ids = Idstring("red")
+			local g_ids = Idstring("green")
+			local b_ids = Idstring("blue")
+			local color = Color.red
+			local opacity_ids = Idstring("opacity")
+			local opacity = 255
+			World:effect_manager():set_simulator_var_float(mylighteffect, r_ids, r_ids, opacity_ids, color.r * opacity)
+			World:effect_manager():set_simulator_var_float(mylighteffect, g_ids, g_ids, opacity_ids, color.g * opacity)
+			World:effect_manager():set_simulator_var_float(mylighteffect, b_ids, b_ids, opacity_ids, color.b * opacity)
+			mylighteffect:set_position(managers.player:local_player():position() + Vector3(0,0,100))
+		else
+			mylighteffect = nil
+		end
+		
+		
+		World:effect_manager():kill(self._light_effect)
+	
+	
+lighttexture="guis/textures/pd2/hud_shield"
+function cycle_pinglight()
+	local lights = {		"units/lights/spot_light_projection_textures/spotprojection_05_flashlight_df",
+		"units/lights/spot_light_projection_textures/spotprojection_12_flashlight_df",
+		"units/lights/spot_light_projection_textures/spotprojection_16_flashlight_df",
+		"units/lights/spot_light_projection_textures/spotprojection_06_downlight_df",
+		"units/lights/spot_light_projection_textures/spotprojection_10_flower_df",
+		"units/lights/spot_light_projection_textures/spotprojection_08_flashlight_df",
+		"units/lights/spot_light_projection_textures/spotprojection_08_spot_df",
+		"units/lights/spot_light_projection_textures/spotprojection_07_round_df",
+	}
+	lighttextureindex = (lighttextureindex + 1) % #lights
+	lighttexture = lights[lighttextureindex] or lighttextureindex
+	OffyLib:c_log("New texture: " .. tostring(lighttexture) .. " : " .. tostring(lighttextureindex) .. "/" ..tostring(#lights))
+end
+	
+	
+	
+	
 --]]
 --wp_escort
 
@@ -103,6 +223,7 @@ QuickChat = QuickChat or {}
 QuickChat._mod_path = ModQuickChat and ModQuickChat.GetPath and ModQuickChat:GetPath() or ModPath
 QuickChat._localization_path = QuickChat._mod_path .. "localization/"
 QuickChat._assets_path = QuickChat._mod_path .. "assets/"
+QuickChat._menu_path = QuickChat._mod_path .. "menu/"
 QuickChat._save_path = SavePath .. "quickchat_settings.json"
 QuickChat._waypoints_save_path = SavePath .. "quickchat_waypoints.json"
 QuickChat._network_data = {
@@ -151,11 +272,33 @@ QuickChat.radial_menu_item_template = {
 	show_text = false,
 	stay_open = false
 }
---QuickChat.radial_menu_data = {} --for reference
+QuickChat.radial_menu_data = {} --for reference
 
 QuickChat.USER_ID = QuickChat.USER_ID or "local_user"
 
+QuickChat._dependencies = {
+	radialmousemenu = {
+		check_has_dependency = function()
+			return _G.RadialMouseMenu and true or false
+		end,
+		name_id = "menu_dependency_radialmousemenu_title",
+		desc_id = "menu_dependency_radialmousemenu_desc",
+		link = "https://modworkshop.net/mod/27225"
+	},
+	holdthekey = {
+		check_has_dependency = function()
+			return _G.HoldTheKey and true or false
+		end,
+		name_id = "menu_dependency_holdthekey_title",
+		desc_id = "menu_dependency_holdthekey_desc",
+		link = "https://modworkshop.net/mod/22253"
+	}
+}
+
 QuickChat.tweak_data = QuickChat.tweak_data or {
+	keybind_ids = {
+		ping_menu = "pingwaypoint_keybind_ping"
+	},
 	current_network_message = "QuickChat_v1_Add",
 	network_operation_ids = {
 		REGISTER = 1,
@@ -258,6 +401,12 @@ QuickChat.tweak_data = QuickChat.tweak_data or {
 				deployables = false
 			}
 		}
+	},
+	spotlight = {
+		offset_position = Vector3(0,0,100),
+		angle = 30,
+		range = 350,
+		mul_index = 2
 	},
 	max_raycast_distance = 10000, --100 meters
 	contextual_interactions = {
@@ -400,8 +549,15 @@ function QuickChat:GetSlotmaskFromCastType(cast_type)
 	return self.cast_slotmasks[cast_type]
 end
 
+
+-- only use this for comparing, NOT to use as an index, since it can be zero/inf
 function QuickChat:GetMaxPingsPerPlayer()
-	return self.settings.max_pings_per_player
+	local pings_max = self.settings.max_pings_per_player
+	if pings_max == 0 then 
+		return math.huge
+	else
+		return math.ceil(pings_max)
+	end
 end
 
 	-- General functions --
@@ -517,7 +673,10 @@ function QuickChat:GenerateRadialItem(id)
 end
 
 function QuickChat:SetRadialMenu(id,menu)
-	self.active_radial_menus[id] = menu
+	self.active_radial_menus[id] = {
+		menu = menu,
+		input_cache = nil
+	}
 	menu.Hide = function(self,skip_reset,do_success_cb)
 		if not skip_reset then 
 			RadialMouseMenu.current_menu = nil
@@ -586,15 +745,26 @@ function QuickChat:Update(t,dt)
 end
 
 function QuickChat:UpdateInput(t,dt)
-	local ping_menu = self.active_radial_menus.ping_menu
-	if ping_menu then 
-		local held = HoldTheKey:Key_Held("m")
-		if held and not self.input_cache then 
-			ping_menu:Show()
-		elseif self.input_cache and not held then 
-			ping_menu:Hide(nil,true)
+	for menu_id,data in pairs(self.active_radial_menus) do
+		local keybind_id = self.tweak_data.keybind_ids[menu_id]
+		--return HoldTheKey:Get_Mod_Keybind("pingwaypoint_keybind_ping")
+--		local held = HoldTheKey:Keybind_Held(keybind_id)
+		local held = HoldTheKey:Key_Held("mouse 2")
+		local input_cache = data.input_cache
+		
+		data.input_cache = held --update cached key state now so that we can break at will
+		local menu = data.menu
+		if menu:active() then 
+			if input_cache and not held then
+				menu:Hide(nil,true)
+				break
+			end
+		else
+			if held and not input_cache then
+				menu:Show()
+				break
+			end
 		end
-		self.input_cache = held
 	end
 end
 
@@ -664,7 +834,7 @@ function QuickChat:UpdateWaypoints(t,dt)
 				if light then 
 					local light_position = target_position + Vector3(0,0,150)
 					light:set_position(light_position)
-					Draw:brush(Color.white):sphere(light_position,10)
+--					Draw:brush(Color.white):sphere(light_position,10)
 --					local r = light:rotation()
 --					light:set_rotation(Rotation(r:yaw(),r:pitch() + (dt * 360),r:roll()))
 				end
@@ -822,11 +992,12 @@ function QuickChat:CreatePing(ping_type)
 		--search for interactable objects
 		local interaction_ext = hit_unit.interaction and hit_unit:interaction()
 		if interaction_ext then 
-			if not interaction_ext._disabled and interaction_ext._active then 
+			if not interaction_ext._disabled and interaction_ext:active() and interaction_ext:can_interact() then 
 				unit = hit_unit or unit
 				local interaction_tweak_id = interaction_ext.tweak_data
 				local contextual_interaction_data = interaction_tweak_id and self.tweak_data.contextual_interactions[interaction_tweak_id]
 
+				self:log("interaction id " .. tostring(interaction_tweak_id))
 				
 				target_category = managers.localization:text("menu_ping_category_interactable")
 				params = self.waypoint_parameters.interact
@@ -837,7 +1008,6 @@ function QuickChat:CreatePing(ping_type)
 					
 					target_name = (interaction_tweak_data.text_id and managers.localization:text(interaction_tweak_data.text_id)) or (contextual_interaction_data.target_name and managers.localization:text(contextual_interaction_data.target_name)) or target_name
 					target_category = contextual_interaction_data.target_category and managers.localization:text(contextual_interaction_data.target_category) or target_category
-					
 					if contextual_interaction_data.ping_type then
 						params = self.tweak_data.waypoint_parameters[contextual_interaction_data.ping_type] or params
 					end
@@ -972,16 +1142,34 @@ function QuickChat:CreatePing(ping_type)
 		
 		self:RegisterWaypoint(output_data)
 		
---		self:SyncWaypointToPeers(waypoint_data) --todo
+		self:SyncWaypointToPeers(panel_params)
 	end
 end
 	
 --create hud indicators with this waypoint data
+--[[
+parameters:
+	id: the unique identifier for this waypoint. presented as an int, which incremements +1 with each waypoint from its parent user.
+	icon_id: string. the identifier for the icon. used in conjunction with icon_type to determine the icon
+	icon_type: int. determines where to retrieve the texture from, in conjunction with icon_id. [1] indicates hudiconstweakdata source; [2] indicates premade (texture and texture_rect determined by this mod's tweakdata instead).
+	text_id: the identifier for the string that should be displayed alongside this waypoint, as according to this mod's tweakdata. localized.
+	custom_text: the custom text that should be displayed alongside this waypoint. can be disabled for waypoints from other players. not localized.
+	is_world: boolean. indicates whether this waypoint is a static positional waypoint
+	color: Color or string. If string, auto-converts to Color. Determines the icon color, beam color, and spotlight color.
+	position: Vector3. The position for this waypoint.
+	is_character: boolean. 
+	--todo finish
+--]]
 function QuickChat:AddWaypoint(creation_data)
 	local parent_panel = managers.hud._workspace:panel()
 	if alive(parent_panel) then 
+		local texture,texture_rect = creation_data.texture,creation_data.texture_rect
+		local text = creation_data.text
+		
 		--create panel for waypoint, and all the bits
-		local waypoint_data = {}
+		local waypoint_data = {
+			creation_data = creation_data
+		}
 		
 		local bitmap_size = 24
 		local panel = parent_panel:panel({
@@ -1015,7 +1203,7 @@ function QuickChat:AddWaypoint(creation_data)
 		
 		waypoint_data._text = panel:text({
 			name = "text",
-			text = tostring(creation_data.text),
+			text = tostring(text),
 			align = "left",
 			x = bitmap_size * 1.5,
 	--		x = -100,
@@ -1028,7 +1216,7 @@ function QuickChat:AddWaypoint(creation_data)
 			color = Color.white
 		})
 		
-		local do_workspace = true
+		local do_workspace = false
 		if do_workspace then
 			local w = 100
 			local h = 800
@@ -1089,15 +1277,18 @@ function QuickChat:AddWaypoint(creation_data)
 		
 		
 		if creation_data.light_enabled then 
-			local light_texture = creation_data.light_texture or "units/lights/spot_light_projection_textures/spotprojection_11_flashlight_df" 
+			local light_texture = _G.lighttexture or creation_data.light_texture or "units/lights/spot_light_projection_textures/spotprojection_11_flashlight_df" 
 			local light = World:create_light("spot|specular|plane_projection", light_texture)
 			waypoint_data._light = light
-			light:set_position(creation_data.position + Vector3(0,0,0))
-			light:set_color(Color.red or creation_data.color)
-			light:set_spot_angle_end(90)
-			light:set_far_range(10000)
-			light:set_multiplier(2)
-			light:set_rotation(Rotation(0,0,0))
+			light:set_position(creation_data.position + self.tweak_data.spotlight.offset_position)
+			light:set_color(creation_data.color or Color())
+			light:set_spot_angle_end(self.tweak_data.spotlight.angle or 60)
+			light:set_far_range(self.tweak_data.spotlight.range or 10000)
+			light:set_multiplier(self.tweak_data.spotlight.mul_index or 2)
+			local spot_rot = creation_data.rotation or Rotation()
+			local td_spot_rot = self.tweak_data.spotlight.rotation or Rotation()
+			spot_rot = Rotation(spot_rot:yaw() + td_spot_rot:yaw(),spot_rot:pitch() + td_spot_rot:pitch(),spot_rot:roll() + td_spot_rot:roll())
+			light:set_rotation(spot_rot)
 			light:set_enable(true)
 		end
 		
@@ -1230,23 +1421,29 @@ function QuickChat:SyncWaypointToPeers(waypoint_data)
 	end
 end
 
-function QuickChat:GetWaypointString(waypoint_data)
-	local message_id
-	local custom_text
-	local icon_type
-	local icon_id
-	local duration
-	local target_type
+--todo valid checking for all parameters
+function QuickChat:GetWaypointString(data)
+	local text_id = data.text_id
+	local custom_text = data.text --todo
+	local icon_type = data.icon_type
+	local icon_id = data.icon_id
+	local end_t = data.duration + Application:time()
+	local target_type = data.target_type
 	local target_id
-	local position
-	local destroy_id 
+	if data.unit and not data.is_world then 
+		target_id = data.unit:id()
+	else
+		target_id = "nil"
+	end
+	local position = data.position and math.vector_to_string(data.position)
+	local destroy_id = data.destroy_id
 	
 	return table.concat({
-		message_id,
+		text_id,
 		custom_text,
 		icon_type,
 		icon_id,
-		duration,
+		end_t,
 		target_type,
 		target_id,
 		position,
@@ -1304,7 +1501,8 @@ end
 
 --on network message received:
 Hooks:Add("NetworkReceivedData", "NetworkReceivedData_QuickChat", function(sender, message_id, message)
-	if managers.chat and managers.chat:is_peer_muted(sender) then
+	local peer = managers.network:session():peer(sender)
+	if not peer or managers.chat and managers.chat:is_peer_muted(peer) then
 		--don't do anything because peer is muted
 		--blocked. unfollowed. reported.
 	else
@@ -1317,7 +1515,6 @@ Hooks:Add("NetworkReceivedData", "NetworkReceivedData_QuickChat", function(sende
 					return
 				end
 				
-				local peer = managers.network:session():peer(sender)
 				if peer then 
 					if operation == QuickChat.tweak_data.network_operation_ids.REGISTER then 
 						self:RegisterPeer(peer,ping_data)
@@ -1353,6 +1550,21 @@ Hooks:Add("MenuManagerInitialize", "MenuManagerInitialize_QuickChat", function(m
 		
 	end
 	
+	MenuCallbackHandler.callback_pingwaypoint_debug = function(self,item)
+		QuickChat.settings.debug_log_enabled = item:value() == "on"
+		QuickChat:Save()
+	end
+	
+	
+	MenuCallbackHandler.callback_pingwaypoint_max_pings_per_player = function(self,item)
+		QuickChat.settings.max_pings_per_player = tonumber(item:value())
+		QuickChat:Save()
+	end
+	
+	MenuCallbackHandler.func_pingwaypoint_keybind_ping = function(self)
+		QuickChat:log("This should not be called")
+	end
+	
 	MenuCallbackHandler.callback_quickchat_mainmenu_close = function(self)
 		QuickChat:Save()
 	end
@@ -1364,7 +1576,7 @@ Hooks:Add("MenuManagerInitialize", "MenuManagerInitialize_QuickChat", function(m
 	local radial_menu_data = QuickChat.radial_menu_data
 	RadialMouseMenu:new(radial_menu_data,callback(QuickChat,QuickChat,"SetRadialMenu","ping_menu"))
 	
---	MenuHelper:LoadFromJsonFile(QuickChat._menu_path .. "menu/options.txt", QuickChat, QuickChat.settings)		
+	MenuHelper:LoadFromJsonFile(QuickChat._menu_path .. "options.json", QuickChat, QuickChat.settings)		
 end)
 
 

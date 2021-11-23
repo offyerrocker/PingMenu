@@ -1,6 +1,13 @@
 {
 	"menu_missing_rmm_prompt_title" : "Missing RadialMouseMenu!",
 	"menu_missing_rmm_prompt_desc" : "Your installation of RadialMouseMenu is either missing or installed incorrectly! Please visit the mod page for more information: https://modworkshop.net/mod/27225",
+	"menu_missing_dependencies_prompt_title" : "Missing Dependencies!",
+	"menu_missing_dependencies_prompt_desc" : "Without these mods, you will crash when attempting to use the Ping Menu. It is recommended to disable Ping Menu if you do not intend to install these dependencies.\n-You are missing the following dependencies:",
+	"menu_missing_dependency_desc" : "$NAME : $DESC : $LINK\n",
+	"menu_dependency_radialmousemenu_title" : "Radial Mouse Menu",
+	"menu_dependency_radialmousemenu_desc" : "Used for creating the ping menu.",
+	"menu_dependency_holdthekey_title" : "HoldTheKey",
+	"menu_dependency_holdthekey_desc" : "Used for detecting user input for the ping menu.",
 	
 	"menu_ping_pickup_label" : "Pick Up",
 	"menu_ping_interact_label" : "Interact",
@@ -14,6 +21,18 @@
 	"menu_ping_category_corpse" : "Corpse",
 	"menu_ping_category_deployable" : "Deployable",
 	"menu_ping_hostage_vip" : "VIP",
+	
+	"menu_pingwaypoint_mainmenu_title" : "Ping Menu",
+	"menu_pingwaypoint_debug_title" : "Allow Debug Logs",
+	"menu_pingwaypoint_debug_desc" : "If true, writes debug data to Console/BLT log",
+	"menu_pingwaypoint_keybind_ping_title" : "Ping Keybind",
+	"menu_pingwaypoint_keybind_ping_desc" : "Bind the key to create pings here",
+	"menu_pingwaypoint_max_pings_per_player_title" : "Maximum number of pings (local)",
+	"menu_pingwaypoint_max_pings_per_player_desc" : "Max number of pings before deleting old pings. Rounded up.\nSet to 0 for no limit.",
+	
+	
+	
+	
 	
 	"pingmenu_mainmenu_title" : "Ping Menu",
 	"pingmenu_mainmenu_desc" : "Ping Menu mod options",
