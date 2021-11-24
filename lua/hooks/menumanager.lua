@@ -407,7 +407,7 @@ QuickChat.tweak_data = QuickChat.tweak_data or {
 		look = {
 			id = "look",
 			text_id = "text_look",
-			color = Color(0,1,1),
+			color = Color(1,1,1),
 			icon_id = "wp_standard",
 			icon_type = 1,
 			effect = "default",
@@ -430,7 +430,7 @@ QuickChat.tweak_data = QuickChat.tweak_data or {
 		defend = {
 			id = "defend",
 			text_id = "text_defend",
-			color = Color(0,1,1),
+			color = Color(1,1,1),
 			icon_id = "pd2_defend",
 			icon_type = 1,
 			effect = "default",
@@ -452,7 +452,7 @@ QuickChat.tweak_data = QuickChat.tweak_data or {
 		},
 		interact = {
 			id = "interact",
-			color = Color(1,0.2,0),
+			color = Color(1,1,1),
 			text_id = "text_interact",
 			icon_id = "equipment_doctor_bag",
 			icon_type = 1,
@@ -475,7 +475,7 @@ QuickChat.tweak_data = QuickChat.tweak_data or {
 		},
 		pickup = {
 			id = "pickup",
-			color = Color(1,0.2,0),
+			color = Color(1,1,1),
 			text_id = "text_pickup",
 			icon_id = "icon_pickup",
 			icon_type = 2,
@@ -498,7 +498,7 @@ QuickChat.tweak_data = QuickChat.tweak_data or {
 		},
 		go = {
 			id = "go",
-			color = Color(1,0.2,0),
+			color = Color(1,1,1),
 			text_id = "text_go",
 			icon_id = "pd2_goto", --or pd2_escape
 			icon_type = 1,
@@ -521,7 +521,7 @@ QuickChat.tweak_data = QuickChat.tweak_data or {
 		},
 		attack = {
 			id = "attack",
-			color = Color(1,0.2,0),
+			color = Color(1,1,1),
 			text_id = "text_attack",
 			icon_id = "pd2_kill",
 			icon_type = 1,
@@ -1293,7 +1293,7 @@ function QuickChat:CreatePing(ping_type)
 	local waypoint_data = self:AddWaypoint(creation_data)
 	if waypoint_data then 
 		waypoint_data.color = color
-		waypoint_data.beam_color = color
+		waypoint_data.beam_color = peer_color
 		waypoint_data.unit = unit
 		waypoint_data.ping_type = ping_type
 		waypoint_data.position = hit_position
@@ -1492,7 +1492,7 @@ function QuickChat:AddWaypoint(creation_data)
 			local spotlight = World:create_light("spot|specular|plane_projection", light_texture)
 			waypoint_data._spotlight = spotlight
 			spotlight:set_position(creation_data.position + self.tweak_data.spotlight.offset_position)
-			spotlight:set_color(creation_data.color or Color())
+			spotlight:set_color(peer_color)
 			spotlight:set_spot_angle_end(self.tweak_data.spotlight.angle or 60)
 			spotlight:set_far_range(self.tweak_data.spotlight.range or 10000)
 			spotlight:set_multiplier(self.tweak_data.spotlight.mul_index or 2)
@@ -2003,446 +2003,3 @@ function QuickChat:SaveSettings()
 		file:close()
 	end
 end
-
-
-
-
-
-
-do return end
-
-
-function QuickChat:OLDCreatePing(ping_type)
-	local params = ping_type and self.waypoint_parameters[ping_type]
-	if not params then 
-		self:log("ERROR: Bad ping_type: QuickChat:CreatePing(" .. tostring(ping_type) .. ")")
-		return
-	end
-	if not params.create_ping then 
-		return
-	end
-	local viewport_cam = managers.viewport:get_current_camera()
-	if not viewport_cam then 
-		--doesn't typically happen, usually for only a brief moment when all four players go into custody
-		return 
-	end
-	
-	local cam_pos = viewport_cam:position()
-	local cam_aim = viewport_cam:rotation():y()
-	local to_pos = (cam_aim * self.tweak_data.max_raycast_distance) + cam_pos
-	
-	local contextual = params.contextual 
-	
-	local ray = World:raycast("ray",cam_pos,to_pos,"slot_mask",params.slotmask + self.cast_slotmasks.generic)
-	local hit_unit = ray and ray.unit
-	local hit_position = ray and ray.position
-	if not (hit_unit or hit_position) then 
-		self:log("No unit found!")
-		return
-	end
-	
-	local is_world = hit_unit:in_slot(QuickChat.cast_slotmasks.world)
-	local target_name
-	local target_category
-	local is_character
-	local is_dead
-	local sound_id
-	local anim_id
-	local normal = ray.normal
-	local unit
-	
-	--search for valid target objects:
-	if contextual then 
-		
-		--search for character (enemy, civilian, friendly ai)
-		local function find_character(_unit,recursive_search)
-			local dmg_extension = _unit.character_damage and _unit:character_damage()
-			is_dead = dmg_extension and dmg_extension:dead()
-			if dmg_extension and not is_dead then 
-				
-				local enemy_team = true
-				local is_civilian = true
-				local is_teammate = true
-				if enemy_team then 
-					params = self.waypoint_parameters.attack
-				elseif is_civilian then 
-				elseif is_teammate then 
-				end
-				
-				return _unit
-			elseif recursive_search and _unit:in_slot(8) and alive(_unit:parent()) then 
-				--if the raycast unit is the shield equipment held by a Shield enemy,
-				--find that Shield enemy instead of the shield equipment itself
-				return find_character(_unit:parent(),false)
-			end
-		end
-
-		unit = find_character(hit_unit,true) or unit
-		
-		
-		--search for interactable objects
-		local interaction_ext = hit_unit.interaction and hit_unit:interaction()
-		if interaction_ext then 
-			if not interaction_ext:disabled() and interaction_ext:active() and interaction_ext:can_interact() then 
-				unit = hit_unit or unit
-				local interaction_tweak_id = interaction_ext.tweak_data
-				local contextual_interaction_data = interaction_tweak_id and self.tweak_data.contextual_interactions[interaction_tweak_id]
-
-				self:log("interaction id " .. tostring(interaction_tweak_id))
-				
-				target_category = managers.localization:text("menu_ping_category_interactable")
-				params = self.waypoint_parameters.interact
-				if contextual_interaction_data then 
-					local interaction_tweak_data = tweak_data.interaction[interaction_tweak_id]
-					sound_id = contextual_interaction_data.sound_id
-					anim_id = contextual_interaction_data.anim_id
-					
-					target_name = (interaction_tweak_data.text_id and managers.localization:text(interaction_tweak_data.text_id)) or (contextual_interaction_data.target_name and managers.localization:text(contextual_interaction_data.target_name)) or target_name
-					target_category = contextual_interaction_data.target_category and managers.localization:text(contextual_interaction_data.target_category) or target_category
-					if contextual_interaction_data.ping_type then
-						params = self.tweak_data.waypoint_parameters[contextual_interaction_data.ping_type] or params
-					end
-				end
-			end
-		end
-		
-		if unit and unit:in_slot(self.cast_slotmasks.pickups) then 
-			params = self.waypoint_parameters.pickups
-		end
---		if unit and unit:base() and getmetatable(unit:base()) == Pickup then 
-			--it's a pickup! pick it up!
-			
---		end
-		
-		--autotarget/icon here
-	elseif not hit_unit:in_slot(managers.slot._masks.world_geometry) then
-		unit = hit_unit
-	end
-	
-	local panel_params = {
-		id = params.id,
-		text = params.text,
-		texture = params.texture,
-		texture_rect = params.texture_rect,
-		color = params.color,
-		is_world = is_world
-	}
-	local icon_id = params.icon_id
-	if icon_id then 
-		local icon_type = params.icon_type
-		if icon_type == 1 then 
-			panel_params.texture,panel_params.texture_rect = tweak_data.hud_icons:get_icon_data(icon_id)
-		elseif icon_type == 2 then 
-			panel_params.texture = self.tweak_data.premade_icons[icon_id].texture
-			panel_params.texture_rect = self.tweak_data.premade_icons[icon_id].texture_rect
-		end
-	end
-	
-	if unit then 
-		local unit_key = unit:key()
-		if unit:character_damage() then 
-			if is_dead == nil then 
-				is_dead = unit:character_damage():dead()
-			end
-			
-			is_character = true
-		end
-		--if the ping raycast hits a valid unit (enemy, civilian, interactable, etc; ie, not world geometry),
-		--synced remove any user pings on that unit
-		for i=#self.active_waypoints[self.USER_ID],1,-1 do 
-			local _waypoint_data = self.active_waypoints[self.USER_ID][i]
-			if _waypoint_data and alive(_waypoint_data.unit) and _waypoint_data.unit:key() == unit_key then 
-				self:RemoveWaypoint(self.USER_ID,i)
-				--break --replace the marker
-				return --or cancel entirely
-			end
-		end
-		
-		panel_params.unit = unit
-	end
-	panel_params.position = hit_position
-	panel_params.is_character = is_character
-	panel_params.light_enabled = true
-	
-	if params.sound_id and not sound_id then 
-		if type(params.sound_id) == "table" then 
-			sound_id = table.random(params.sound_id)
-		elseif type(params.sound_id) == "string" then 
-			sound_id = params.sound_id
-		end
-	end
-	if sound_id then 
-		self:PlayCriminalSound(sound_id,true)
-	end
-	if params.anim_id and not anim_id then 
-		anim_id = params.anim_id
-	end
-	
-	if anim_id then 
-		self:PlayViewmodelAnimation(anim_id)
-	end
-	
-	if false and params.effect then --not yet implemented
-		local effect_position = Vector3()
-		
-		local parent_object_name = params.effect.parent_object_name
-		local parent_object = parent_object and unit:get_object(Idstring(parent_object_name))
-		local use_ray_normal = params.effect.use_ray_normal
-		local use_hit_position = params.effect.use_hit_position
-		local effect_lifetime = params.effect.lifetime
-		local effect_rotation = params.effect.rotation
-		local effect = World:effect_manager():spawn({
-			parent = parent_object,
-			position = effect_position,
-			rotation = effect_rotation or Rotation(0,0,-90)
-		})
-		if effect_lifetime then 
-			DelayedCallbacks:Add("ping_effect_" .. tostring(unit:key()),effect_lifetime,function()
-				if effect and effect ~= -1 then 
-					World:effect_manager():kill(effect)
-				end
-			end)
-		end
-	end
-	
-	--create waypoint panel here
-	--if timer is enabled (if modifier key is held), or if waypoint data forces timer, instigate timer?
-	local output_data =	self:AddWaypoint(panel_params)
-	
-	self:log("You pinged " .. tostring(target_category) .. " - " .. tostring(target_name))
-	
-	if output_data then
-		self.num_waypoints = self.num_waypoints + 1 --increment unique waypoint num
-		output_data.destroy_id = self.num_waypoints
-		output_data.ping_type = ping_type
-		output_data.unit = unit
-		output_data.position = hit_position
-		output_data.is_character = is_character
-		output_data.is_dead = output_data.is_dead
-		output_data.target_name = target_name
-		output_data.target_category = target_category
-		output_data.is_world = is_world
-		output_data.normal = normal
-		output_data.color = params.color
-		output_data.owner_id64 = self.USER_ID
-		output_data.beam_color = tweak_data.chat_colors[managers.network:session():local_peer():id()]
-		
-		if #self.active_waypoints[self.USER_ID] > self:GetMaxPingsPerPlayer() then 
-			self:RemoveWaypoint(self.USER_ID,#self.active_waypoints[self.USER_ID])
-		end
-		
-		self:RegisterWaypoint(output_data)
-		
-		self:SyncWaypointToPeers(panel_params)
-	end
-end
-	
-function QuickChat:OLDAddWaypoint(creation_data)
-	local parent_panel = managers.hud._workspace:panel()
-	if alive(parent_panel) then 
-		local texture,texture_rect = creation_data.texture,creation_data.texture_rect
-	
-		local text = "dummy text here"
-		local text_id = creation_data.text_id
-		local custom_text = creation_data.text
-		if text_id then
-			
-		end
-		
-		local icon_id = creation_data.icon_id
-		local icon_type = creation_data.icon_type
-		if icon_id then 
-			if icon_type == 1 then 
-				texture,texture_rect = tweak_data.hud_icons:get_icon_data(icon_id)
-			elseif icon_type == 2 then 
-				local icon_tweakdata = self.tweak_data.premade_icons[icon_id]
-				if icon_tweakdata then 
-					texture = icon_tweakdata.texture
-					texture_rect = icon_tweakdata.texture_rect
-				end
-			end
-		end
-	
-		
-		--create panel for waypoint, and all the bits
-		local waypoint_data = {
-			creation_data = creation_data
-		}
-		
-		local bitmap_size = self.tweak_data.gui_bitmap.size
-		local panel = parent_panel:panel({
-			name = creation_data.id,
-			w = 200,
-			h = 50
-		})
-		waypoint_data._panel = panel
-		local bitmap = panel:bitmap({
-			name = "bitmap",
-			texture = creation_data.texture,
-			texture_rect = creation_data.texture_rect,
-			color = creation_data.color,
-			w = bitmap_size,
-			h = bitmap_size,
-			layer = 2
-		})
-		bitmap:set_y((panel:h() - bitmap:h()) / 2)
-		local outer_box = panel:rect({
-			w = bitmap_size,
-			h = bitmap_size,
-			rotation = 45,
-			alpha = 0.7,
-			layer = -3
-		})
-		outer_box:set_center(bitmap:center())
-		
-		waypoint_data._bitmap = bitmap
-		
-		waypoint_data.x_offset = - bitmap_size / 2 --2
-		
-		waypoint_data._text = panel:text({
-			name = "text",
-			text = tostring(text),
-			align = "left",
-			x = bitmap_size * 1.5,
-	--		x = -100,
-	--		y = -100,
-			font = self.tweak_data.gui_text.font,
-			font_size = self.tweak_data.gui_text.font_size,
-			vertical = "center",
-			alpha = self.tweak_data.gui_text.alpha,
-			layer = 3,
-			color = Color.white
-		})
-		
-		if creation_data.workspace_enabled then
-			local w = 100
-			local h = 800
-			local world_w = w * 0.1
-			local world_h = h * 0.1
-			
-			local start_pos = Vector3()
-			if creation_data.is_world then 
-				start_pos = creation_data.position or start_pos
-			end
-			
-			local ws = self._gui:create_world_workspace(world_w,world_h,start_pos - Vector3(0,world_h/2,0),Vector3(world_w,0,0),Vector3(0,world_h,0))
-			ws:set_billboard(Workspace.BILLBOARD_BOTH)
-			ws:panel():rect({
-				name = "debug",
-				color = Color.red,
-				alpha = 0.25
-			})
-			ws:panel():bitmap({
-				name = "bitmap",
-				w = w,
-				h = h,
-				texture = tweak_data.hud_icons.wp_arrow.texture,
-				texture_rect = tweak_data.hud_icons.wp_arrow.texture_rect,
-				color = creation_data.color,
-				alpha = self.tweak_data.gui_bitmap.alpha
-			})
-			
-			--[[
-			local position_offset_x = 0
-			local position_offset_y = 0
-			local position_offset_z = 0
-			local rot = managers.viewport:get_current_camera():rotation()
-			local rot_nopitch = Rotation(rot:yaw(),0,rot:pitch())
-			local position_offset = Vector3(position_offset_x,position_offset_y,0)
-			mvec3_rot(position_offset,rot_nopitch)
-			local hit_unit = creation_data.unit
-			local attachment_obj = hit_unit:get_object(Idstring("Head")) or hit_unit:orientation_object()()
-			local x_axis = rot:x():normalized() * world_w
-			local oobb = attachment_obj:oobb
-			local y_axis = rot:z():normalized() * world_h
-			local top_left = oobb:center() + Vector3(0,0,position_offset_z) + position_offset - (x_axis / 2)
-			ws:set_linked(world_w,world_h,attachment_obj,top_left,x_axis,y_axis)
-			--]]
-			local hit_unit = creation_data.unit
-			if hit_unit and not creation_data.is_world then 
-				local head_obj = hit_unit:get_object(Idstring("Head"))
-				if creation_data.is_character and head_obj then 
-					local attachment_obj = head_obj or hit_unit:orientation_object()
-					local oobb = attachment_obj:oobb()
-					ws:set_linked(world_w,world_h,attachment_obj,oobb:center() - Vector3(0,world_h/2,0),Vector3(world_w,0,0),Vector3(0,world_h,0))
-				else
-					local attachment_obj = hit_unit:orientation_object()
-					ws:set_linked(world_w,world_h,attachment_obj,attachment_obj:position() - creation_data.position,Vector3(world_w,0,0),Vector3(0,world_h,0))
-				end
-			end
-			waypoint_data._workspace = ws
-		end
-		
-		
-		if creation_data.light_enabled then 
-			local light_texture = _G.lighttexture or creation_data.light_texture or "units/lights/spot_light_projection_textures/spotprojection_11_flashlight_df" 
-			local spotlight = World:create_light("spot|specular|plane_projection", light_texture)
-			waypoint_data._spotlight = spotlight
-			spotlight:set_position(creation_data.position + self.tweak_data.spotlight.offset_position)
-			spotlight:set_color(creation_data.color or Color())
-			spotlight:set_spot_angle_end(self.tweak_data.spotlight.angle or 60)
-			spotlight:set_far_range(self.tweak_data.spotlight.range or 10000)
-			spotlight:set_multiplier(self.tweak_data.spotlight.mul_index or 2)
-			local spot_rot = creation_data.rotation or Rotation()
-			local td_spot_rot = self.tweak_data.spotlight.rotation or Rotation()
-			spot_rot = Rotation(spot_rot:yaw() + td_spot_rot:yaw(),spot_rot:pitch() + td_spot_rot:pitch(),spot_rot:roll() + td_spot_rot:roll())
-			spotlight:set_rotation(spot_rot)
-			spotlight:set_enable(true)
-		end
-		
-		return waypoint_data
-	else
-		self:log("ERROR: AddWaypoint() failed- parent panel does not exist")
-	end
-	return false
-end
-
---parse incoming data, return parsed data and an operation id
-function QuickChat:OLDSyncAddWaypoint_v1(message)
-	local data = string.split(message,"|")
-	local min_arguments = 6
-	if #data < min_arguments then 
-		self:log("ERROR: Not enough arguments in message! (" .. tostring(#data) .. " found, should be >= " .. tostring(min_arguments) .. " < " .. tostring(message) .. " > ")
-		return nil
-	end
-	
-	local text_id = data[1]
-	local custom_text = data[2]
-	local icon_type = data[3] and tonumber(data[3])
-	local icon_id = data[4]
-	local end_t = data[5] and tonumber(data[5])
-	local target_type = data[6] and tonumber(data[6])
-	local target_id = data[7] and tonumber(data[7])
-	local position = data[8] and math.string_to_vector(data[8])
-	local destroy_id = data[9] and tonumber(data[9])
-	local operation = data[10] and tonumber(data[10])
-	return {
-		text_id = text_id,
-		custom_text = custom_text,
-		icon_type = icon_type,
-		icon_id = icon_id,
-		end_t = end_t,
-		target_type = target_type,
-		target_id = target_id,
-		position = position,
-		destroy_id = destroy_id,
-		operation = operation
-	},QuickChat.tweak_data.network_operation_ids.ADD
-end
-
-function QuickChat:OLDSyncRemoveWaypoint_v1(message)
-	local data = string.split(data,"|")
-	local destroy_id = data[9] and tonumber(data[9])
-	return {
-		destroy_id = destroy_id
-	},QuickChat.tweak_data.network_operation_ids.REMOVE
-end
-
-function QuickChat:OLDRegister_v1(message)
-	return {
-		version_id = message
-	},QuickChat.tweak_data.network_operation_ids.REGISTER
-end
-
-
-
