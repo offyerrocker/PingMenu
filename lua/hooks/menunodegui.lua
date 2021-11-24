@@ -1,5 +1,5 @@
 Hooks:PostHook(MenuNodeGui,"_setup_item_rows","tacticallean_checkforholdthekeydependency",function(self,...)
-    if not self._HAS_SHOWN_PING_DEPENDENCIES_MISSING_PROMPT then
+    if QuickChat and not self._HAS_SHOWN_PING_DEPENDENCIES_MISSING_PROMPT then
 		local function loc(text)
 			return managers.localization:text(text)
 		end

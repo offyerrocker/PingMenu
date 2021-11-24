@@ -3,34 +3,45 @@
 	dofile("mods/PD2-QuickChat/lua/hooks/menumanager.lua")
 
 	
-todo: 
+todo:
+	-custom table.concat implementation to allow empty strings of length zero
+	-sync color from peers
+	--remove waypoints by vector dot within x deg
+	rewrite sync code receive/send:
+		only send data required for creation and management
+			add "inherit" table for keys of creation_data
+	after register and load-in, inform local user of other users who are using ping menu
+	rewrite sync code version handling (use message id instead to handle both version number and operation type) 
+	- "killfeed" type extra flatscreen hud element (moveable) to show recent pings
+		- or, show feed in chat 
 	- sync existing waypoints to mid-game joins
 	-resolve wall-ping behavior
 		glowing circle for positional markers (spotlight + circle graphic aligned against normal dir; repurpose waypoint)
-	
 	"static" waypoints are created as an offset from the unit, for world collision waypoints
 	vertical waypoint offset (by screen instead of by world)
 	offscreen waypoint position updating
-	prevent ADS when exiting radial menu with rightclick
-	conceptually resolve desync issue
 	case-specific ping types for contextual pings
+		- deployables: show amount remaining?
 	-optional "[You] pinged [object]" message in local chat
-	-chat cooldown
---radial menu
-	--custom radial menu graphics
-	--adjust position of text
-	--adjust size
---closed captions compatibility?
---customization
-	--edit action radials
-	--add and custom keybind N number of action radials in menu?
---menu to manually clear waypoints from any or all player(s)
---hold button to switch to n-second timer?
---timer icon should be separate from normal icon
---register to peers on connected
---don't bother filtering naughty words. anyone who wanted to cuss or toss epithets around could just use chat anyhow
---slow fade remove while still updating positions (low priority)
---better glow/beacon effect for waypoints
+	-voice command cooldown
+lower priority todo: 
+	allow contextual "responding" when pinging others' waypoints; eg. pinging a keycard that someone else has pinged will say "dibs"
+	prevent ADS when exiting radial menu with rightclick
+	--separate table to handle fade-remove waypoints
+	--radial menu
+		--custom radial menu graphics
+		--adjust position of text
+		--adjust size
+	--closed captions compatibility?
+	--customization
+		--edit action radials
+		--add and custom keybind N number of action radials in menu?
+	--menu to manually clear waypoints from any or all player(s)
+	--hold button to switch to n-second timer?
+	--timer icon should be separate from normal icon
+	--register to peers on connected
+	--don't bother filtering naughty words. anyone who wanted to cuss or toss epithets around could just use chat anyhow
+	--slow fade remove while still updating positions (low priority)
 
 specific voiceline cases:
 --jammed drill
@@ -65,6 +76,7 @@ cmd_come
 cmd_point
 cmd_down
 cmd_gogo
+cmd_stop
 
 schema:
 --radial menus can have the following attributes:
@@ -79,6 +91,24 @@ schema:
 	Integer [mod version]
 
 --networked data can represent the following attributes:
+	1. [String] waypoint_id: Unique identifier for this waypoint. Owner-authoritative, should be unique, for syncing removal from owner. Is a stringified Integer, starting at 1 and incrementing upwards for each new waypoint.
+		If this is not unique, waypoints may linger and be unable to be removed by the owner. 
+		Local user should be able to remedy this by manually clearing stale waypoints.
+	2. [String] text_id: Text identifier for waypoint label. Corresponds to a localized string id in QuickChat.tweak_data.premade_text_messages.
+	3. [String] custom_text: Custom waypoint label. Not localized, from owner. If present and allowed, this overrides the text_id.
+	4. [Integer] icon_type: Represents which "library" to retrieve icon data from:
+		= 1: from tweak_data.hud_icons, using get_icon_data(icon_id)
+		= 2: from QuickChat.tweak_data.premade_icons[icon_id]
+	5. [String] icon_id: The key of this icon, as corresponding to either icon "library" as listed above.
+	6. [Float] end_t: The time (Application:time() value) at which this waypoint will be automatically destroyed. Can be "nil".
+	7. [Boolean] show_timer: If true, and if end_t is valid, shows the amount of time remaining in the waypoint text. Can be "nil".
+	8. [Vector3] position: The coordinates of this waypoint in the world.
+	9. [Integer] uid: A unique identifier for this unit, given by Unit:id(), which is synced across clients by the game engine. Can be "nil" if nonexistent.
+	10. [Boolean] is_character: Represents whether or not the given unit is a character with the valid damage extension character_damage(). (Enemy, civilian, joker/hired help, teammate ai, player)
+	11. [Boolean] is_world: Represents whether this waypoint is a "static" world waypoint. In this case, the waypoint will not update its position for any of its indicators (panel, workspace, spotlight)
+	12. [Boolean] is_dead: Represents whether the given unit is dead, which will consequently require a different set of search parameters to find the unit by the given uid.
+	
+	
 	1 Integer [whitelisted text message id]
 	2 String [custom text (optional)]
 	3 Integer [icon source type]
@@ -229,7 +259,7 @@ QuickChat._waypoints_save_path = SavePath .. "quickchat_waypoints.json"
 QuickChat._network_data = {
 	sync_functions_by_name = { --parsers by version id
 		["QuickChat_v1_Register"] = "Register_v1",
-		["QuickChat_v1_Add"] = "SyncWaypoint_v1",
+		["QuickChat_v1_Add"] = "SyncAddWaypoint_v1",
 		["QuickChat_v1_Remove"] = "SyncRemoveWaypoint_v1"
 	},
 	sync_functions_by_version = {
@@ -238,13 +268,20 @@ QuickChat._network_data = {
 			remove = "QuickChat_v1_Remove",
 			register = "QuickChat_v1_Register"
 		}
+	},
+	current_sync_ids = {
+		add = "QuickChat_v1_Register",
+		remove = "QuickChat_v1_Remove",
+		register = "QuickChat_v1_Register"
 	}
 }
 
 QuickChat.default_settings = {
 	debug_log_enabled = true,
 	max_pings_per_player = 3,
-	waypoint_fadeout_duration = 1
+	waypoint_fadeout_duration = 1,
+	waypoint_spotlight_enabled = true,
+	allow_custom_text = true
 }
 QuickChat.settings = QuickChat.settings or table.deep_map_copy(QuickChat.default_settings)
 
@@ -299,20 +336,55 @@ QuickChat.tweak_data = QuickChat.tweak_data or {
 	keybind_ids = {
 		ping_menu = "pingwaypoint_keybind_ping"
 	},
-	current_network_message = "QuickChat_v1_Add",
 	network_operation_ids = {
 		REGISTER = 1,
 		ADD = 2,
 		REMOVE = 3
 	}, 
-	beam_height = 1000, --centimeters
-	beam_radius = 1, --centimeters
+	beam = {
+		height = 2000, --centimeters
+		radius = 1, --centimeters
+		alpha = 0.25
+	},
+	spotlight = {
+		offset_position = Vector3(0,0,100),
+		angle = 45,
+		range = 350,
+		mul_index = 2,
+		texture = "units/lights/spot_light_projection_textures/spotprojection_08_spot_df"
+	},
+	gui_bitmap = {
+		size = 24,
+		alpha = 1,
+		layer = 2
+	},
+	gui_text = {
+		font = "fonts/font_medium_shadow_mf",
+		font_size = 24,
+		alpha = 0.8,
+		layer = 3,
+		color = Color.white
+	},
+	gui_workspace = {
+		w = 400,
+		h = 800,
+		world_scale = 0.1
+	},
+	gui_rect = {
+		rotation = 45,
+		alpha = 0.7,
+		layer = -1
+	},
+	gui_panel = {
+		w = 200,
+		h = 50
+	},
 	waypoint_icon_vertical_offset = -1000, --pixels
 	default_waypoints = {
 		generic = {
 			id = "generic",
 			text_id = "text_look",
-			color = Color(0,1,1),
+			color = Color(1,1,1),
 			icon_id = "wp_standard",
 			icon_type = 1, --1 = hudiconstweakdata, 2 = premade
 			effect = "default",
@@ -320,6 +392,7 @@ QuickChat.tweak_data = QuickChat.tweak_data or {
 			anim_id = "cmd_point",
 			create_ping = true,
 			contextual = true,
+			duration = nil,
 			show_distance = true,
 			show_timer = false,
 			use_timer = false,
@@ -331,53 +404,50 @@ QuickChat.tweak_data = QuickChat.tweak_data or {
 				deployables = true
 			}
 		},
-		attack = {
-			id = "attack",
-			color = Color(1,0.2,0),
-			text_id = "text_attack",
-			icon_id = "pd2_kill",
+		look = {
+			id = "look",
+			text_id = "text_look",
+			color = Color(0,1,1),
+			icon_id = "wp_standard",
 			icon_type = 1,
 			effect = "default",
-			sound_id = "g23", --"shoot em!" or "v18" for "wipe em out/clear the room"
+			sound_id = "g15",
 			anim_id = "cmd_point",
 			create_ping = true,
+			contextual = false,
+			duration = nil,
 			show_distance = true,
 			show_timer = false,
 			use_timer = false,
 			cast_targets = {
 				enemies = true,
 				civilians = true,
-				friendlies = false, --not sure
-				pickups = false,
-				deployables = false
+				friendlies = true,
+				pickups = true,
+				deployables = true
 			}
 		},
-		pickup = {
-			id = "pickup",
-			color = Color(1,0.2,0),
-			text_id = "text_pickup",
-			icon_id = "icon_pickup",
-			icon_type = 2,
-			texture = "guis/textures/hud_icons",
-			texture_rect = {
-				0,
-				192,
-				45,
-				50
-			},
+		defend = {
+			id = "defend",
+			text_id = "text_defend",
+			color = Color(0,1,1),
+			icon_id = "pd2_defend",
+			icon_type = 1,
 			effect = "default",
-			sound_id = "v04", --"found it, it's here"
-			anim_id = "cmd_point",
+			sound_id = "g16", --keep defending!
+			anim_id = "cmd_stop",
 			create_ping = true,
+			contextual = false,
+			duration = nil,
 			show_distance = true,
 			show_timer = false,
 			use_timer = false,
 			cast_targets = {
 				enemies = true,
 				civilians = true,
-				friendlies = false, --not sure
+				friendlies = true,
 				pickups = true,
-				deployables = false
+				deployables = true
 			}
 		},
 		interact = {
@@ -390,23 +460,88 @@ QuickChat.tweak_data = QuickChat.tweak_data or {
 			sound_id = "v44",
 			anim_id = "cmd_point",
 			create_ping = true,
+			contextual = false,
+			duration = nil,
 			show_distance = true,
 			show_timer = false,
 			use_timer = false,
 			cast_targets = {
 				enemies = true,
 				civilians = true,
-				friendlies = false, --not sure
+				friendlies = false,
+				pickups = false,
+				deployables = false
+			}
+		},
+		pickup = {
+			id = "pickup",
+			color = Color(1,0.2,0),
+			text_id = "text_pickup",
+			icon_id = "icon_pickup",
+			icon_type = 2,
+			effect = "default",
+			sound_id = "v04", --"found it, it's here"
+			anim_id = "cmd_point",
+			create_ping = true,
+			contextual = false,
+			duration = nil,
+			show_distance = true,
+			show_timer = false,
+			use_timer = false,
+			cast_targets = {
+				enemies = true,
+				civilians = true,
+				friendlies = false,
+				pickups = true,
+				deployables = false
+			}
+		},
+		go = {
+			id = "go",
+			color = Color(1,0.2,0),
+			text_id = "text_go",
+			icon_id = "pd2_goto", --or pd2_escape
+			icon_type = 1,
+			effect = "default",
+			sound_id = "g13", --"let's go"
+			anim_id = "cmd_gogo",
+			create_ping = true,
+			contextual = false,
+			duration = nil,
+			show_distance = true,
+			show_timer = false,
+			use_timer = false,
+			cast_targets = {
+				enemies = true,
+				civilians = true,
+				friendlies = false,
+				pickups = true,
+				deployables = false
+			}
+		},
+		attack = {
+			id = "attack",
+			color = Color(1,0.2,0),
+			text_id = "text_attack",
+			icon_id = "pd2_kill",
+			icon_type = 1,
+			effect = "default",
+			sound_id = "g23", --"shoot em!" or "v18" for "wipe em out/clear the room"
+			anim_id = "cmd_point",
+			create_ping = true,
+			contextual = false,
+			duration = nil,
+			show_distance = true,
+			show_timer = false,
+			use_timer = false,
+			cast_targets = {
+				enemies = true,
+				civilians = true,
+				friendlies = false,
 				pickups = false,
 				deployables = false
 			}
 		}
-	},
-	spotlight = {
-		offset_position = Vector3(0,0,100),
-		angle = 30,
-		range = 350,
-		mul_index = 2
 	},
 	max_raycast_distance = 10000, --100 meters
 	contextual_interactions = {
@@ -472,10 +607,12 @@ QuickChat.tweak_data = QuickChat.tweak_data or {
 		}
 	},
 	premade_text_messages = {
+		text_look = "menu_ping_look_label", --look at this thing!
 		text_pickup = "menu_ping_pickup_label", --get this thing!
 		text_interact = "menu_ping_interact_label", --use this thing!
 		text_attack = "menu_ping_attack_label", --attack this thing!
-		text_look = "menu_ping_look_label" --look at this thing!
+		text_defend = "menu_ping_defend_label", --defend this thing!
+		text_go = "menu_ping_go_label", --go to this thing!
 	},
 	premade_icons = {
 		icon_pickup = {
@@ -489,6 +626,7 @@ QuickChat.tweak_data = QuickChat.tweak_data or {
 		}
 	},
 	cast_slotmasks = {
+		all = nil, --special; concatenated slotmask of all others
 		enemies = {"enemies",26},
 		civilians = "civilians",
 		friendlies = "criminals",
@@ -527,7 +665,7 @@ QuickChat.active_waypoints = QuickChat.active_waypoints or {}
 
 QuickChat.registered_peers = QuickChat.registered_peers or {
 	--[[
-		[id64] = {
+		[id64 or "local_user"] = {
 			version_id = "1"
 		},
 	--]]
@@ -549,6 +687,9 @@ function QuickChat:GetSlotmaskFromCastType(cast_type)
 	return self.cast_slotmasks[cast_type]
 end
 
+function QuickChat:IsSpotlightEnabled()
+	return self.settings.waypoint_spotlight_enabled
+end
 
 -- only use this for comparing, NOT to use as an index, since it can be zero/inf
 function QuickChat:GetMaxPingsPerPlayer()
@@ -571,11 +712,25 @@ function QuickChat:log(...)
 	end
 end
 
+function QuickChat.string_to_bool(str)
+	if str == "true" then 
+		return true
+	elseif str == "false" then 
+		return false
+	else
+		return nil
+	end
+end
+
 function QuickChat:PopulateSlotmaskData()
 		--populate cast slotmasks
 	for k,v in pairs(self.tweak_data.cast_slotmasks) do 
 		if type(v) == "string" then
-			self.cast_slotmasks[k] = managers.slot:get_mask(v)
+			local slotmask = managers.slot:get_mask(v)
+			self.cast_slotmasks[k] = slotmask
+			
+			self.cast_slotmasks.all = self.cast_slotmasks.all or slotmask
+			self.cast_slotmasks.all = self.cast_slotmasks.all + slotmask
 		elseif type(v) == "table" then 
 			local slotmask = self.cast_slotmasks[v]
 			for i,j in pairs(v) do 
@@ -592,6 +747,8 @@ function QuickChat:PopulateSlotmaskData()
 				end
 			end
 			self.cast_slotmasks[k] = slotmask
+			self.cast_slotmasks.all = self.cast_slotmasks.all or slotmask
+			self.cast_slotmasks.all = self.cast_slotmasks.all + slotmask
 		end
 	end
 	
@@ -620,6 +777,7 @@ function QuickChat:PopulateDefaultWaypointData()
 		self.waypoint_parameters[k] = {
 			id = v.id,
 			text = managers.localization:text(td.premade_text_messages[tostring(v.text_id)]),
+			text_id = v.text_id,
 			color = v.color,
 			texture = texture,
 			texture_rect = texture_rect,
@@ -630,6 +788,7 @@ function QuickChat:PopulateDefaultWaypointData()
 			icon_type = v.icon_type,
 			sound_id = v.sound_id,
 			create_ping = v.create_ping,
+			duration = v.duration,
 			show_distance = v.show_distance,
 			show_timer = v.show_timer,
 			use_timer = v.use_timer,
@@ -647,9 +806,12 @@ function QuickChat:CreateRadialMenus()
 	--generate radial menu data (creation comes later)
 	local radial_menu_data = table.deep_map_copy(self.radial_menu_object_template)
 	
-	table.insert(radial_menu_data.items,self:GenerateRadialItem("generic"))
+	table.insert(radial_menu_data.items,self:GenerateRadialItem("look"))
 	table.insert(radial_menu_data.items,self:GenerateRadialItem("attack"))
 	table.insert(radial_menu_data.items,self:GenerateRadialItem("pickup"))
+	table.insert(radial_menu_data.items,self:GenerateRadialItem("go"))
+	table.insert(radial_menu_data.items,self:GenerateRadialItem("defend"))
+	table.insert(radial_menu_data.items,self:GenerateRadialItem("interact"))
 	
 	self.radial_menu_data = radial_menu_data
 end
@@ -660,9 +822,22 @@ function QuickChat:GenerateRadialItem(id)
 	if template_data then 
 		new_item = table.deep_map_copy(self.radial_menu_item_template)
 		new_item.text = template_data.text
+		local texture,texture_rect
+		local icon_id,icon_type = template_data.icon_id,template_data.icon_type
+		if icon_id then 
+			if icon_type == 1 then 
+				texture,texture_rect = tweak_data.hud_icons:get_icon_data(icon_id)
+			elseif icon_type == 2 then 
+				local icon_tweakdata = self.tweak_data.premade_icons[icon_id]
+				if icon_tweakdata then 
+					texture = icon_tweakdata.texture
+					texture_rect = icon_tweakdata.texture_rect
+				end
+			end
+		end
 		new_item.icon = {
-			texture = template_data.texture,
-			texture_rect = template_data.texture_rect,
+			texture = texture,
+			texture_rect = texture_rect,
 			w = template_data.w,
 			h = template_data.h,
 			color = template_data.color
@@ -794,7 +969,7 @@ function QuickChat:UpdateWaypoints(t,dt)
 			local text = waypoint_data._text
 			local bitmap = waypoint_data._bitmap
 			local x_offset = waypoint_data.x_offset or 0
-			local light = waypoint_data._light
+			local light = waypoint_data._spotlight
 			
 			--check for timeout
 			if waypoint_data.end_t then 
@@ -805,82 +980,89 @@ function QuickChat:UpdateWaypoints(t,dt)
 
 			if not queued_remove then 
 				--check for dead
-				if waypoint_data.is_dead == false then 
-					if unit:character_damage():dead() then 
-						queued_remove = true
-					end
-				end
 				
 				--update position on screen
 				
 					
 				local target_position = waypoint_data.position
-				if not waypoint_data.is_world and alive(unit) then 
-					local obj
-					if is_character then 
-						obj = unit:get_object(Idstring("Head"))
-						if obj then 
-							target_position = obj:oobb():center()
-						elseif unit:movement() and unit:movement().m_head_pos then 
-							target_position = unit:movement():m_head_pos()
-						else
-							obj = unit:orientation_object()
-							if obj then 
-								target_position = obj:oobb():center()
+				if not waypoint_data.is_world then
+					if alive(unit) then 
+						if waypoint_data.is_dead == false then 
+							if unit:character_damage():dead() then 
+								queued_remove = true
+							end
+						end
+						if not queued_remove then 
+							local obj
+							if is_character then 
+								obj = unit:get_object(Idstring("Head"))
+								if obj then 
+									target_position = obj:oobb():center()
+								elseif unit:movement() and unit:movement().m_head_pos then 
+									target_position = unit:movement():m_head_pos()
+								else
+									obj = unit:orientation_object()
+									if obj then 
+										target_position = obj:oobb():center()
+									end
+								end
 							end
 						end
 					end
-				end
-				if light then 
-					local light_position = target_position + Vector3(0,0,150)
-					light:set_position(light_position)
---					Draw:brush(Color.white):sphere(light_position,10)
---					local r = light:rotation()
---					light:set_rotation(Rotation(r:yaw(),r:pitch() + (dt * 360),r:roll()))
+					
+					if spotlight then 
+					--don't update light position if static
+						local light_position = target_position + Vector3(0,0,150)
+						spotlight:set_position(light_position)
+	--					Draw:brush(Color.white):sphere(light_position,10)
+	--					local r = light:rotation()
+	--					light:set_rotation(Rotation(r:yaw(),r:pitch() + (dt * 360),r:roll()))
+					end
 				end
 				
 --				local from_pos,to_pos,pos
-				if target_position then 
-					local orig_position = mvec3_copy(target_position)
-					
-				--draw beam
-					Draw:brush(beam_color:with_alpha(0.25)):cone(orig_position + Vector3(0,0,self.tweak_data.beam_height),orig_position,self.tweak_data.beam_radius)
-					
-					
-					local pos = workspace:world_to_screen(camera,target_position)
-					pos.y = pos.y + self.tweak_data.waypoint_icon_vertical_offset
-					local panel_w,panel_h = panel:size()
-					
-					local dir_to = target_position - cam_pos
-					local dot = mvector3.dot(cam_dir:normalized(),dir_to:normalized())
---					Console:SetTrackerValue("trackera",tostring(dot))
-					text:set_alpha(math.clamp(dot * 100, 0.1, 1))
-					
-					
---					if dot > 0 then 
---						if dot < 0.5 then 
-							if pos.x > parent_panel:w() - panel_w then 
-								panel:set_right(parent_panel:w() + x_offset)
-							else
-								panel:set_left(math.max(0,pos.x) + x_offset)
-							end
-							
-							if pos.y > parent_panel:h() - panel_h then 
-								panel:set_bottom(parent_panel:h())
-							else
-								panel:set_top(math.max(0,pos.y))
-							end
---						else
---						end
---					else						
---					end
-					
-					
-				else
-					self:log("ERROR: No target position found for waypoint uid " .. tostring(waypoint_data.destroy_id))
+				if not queued_remove then 
+					if target_position then 
+						local orig_position = mvec3_copy(target_position)
+						
+					--draw beam
+						Draw:brush(beam_color:with_alpha(self.tweak_data.beam.alpha)):cone(orig_position + Vector3(0,0,self.tweak_data.beam.height),orig_position,self.tweak_data.beam.radius)
+						
+						
+						local pos = workspace:world_to_screen(camera,target_position)
+						pos.y = pos.y + self.tweak_data.waypoint_icon_vertical_offset
+						local panel_w,panel_h = panel:size()
+						
+						local dir_to = target_position - cam_pos
+						local dot = mvector3.dot(cam_dir:normalized(),dir_to:normalized())
+	--					Console:SetTrackerValue("trackera",tostring(dot))
+						text:set_alpha(math.clamp(dot * 100, 0.1, 1))
+						
+						
+	--					if dot > 0 then 
+	--						if dot < 0.5 then 
+								if pos.x > parent_panel:w() - panel_w then 
+									panel:set_right(parent_panel:w() + x_offset)
+								else
+									panel:set_left(math.max(0,pos.x) + x_offset)
+								end
+								
+								if pos.y > parent_panel:h() - panel_h then 
+									panel:set_bottom(parent_panel:h())
+								else
+									panel:set_top(math.max(0,pos.y))
+								end
+	--						else
+	--						end
+	--					else						
+	--					end
+						
+						
+					else
+						self:log("ERROR: No target position found for waypoint id " .. tostring(waypoint_data.waypoint_id))
+					end
+				
 				end
-				
-				
 			end
 			
 			if queued_remove then 
@@ -906,8 +1088,668 @@ function QuickChat:PlayViewmodelAnimation(id)
 	end
 end
 
+function QuickChat:ShouldAllowSyncCustomText()
+	return self.settings.allow_custom_text
+end
+
+	-- Ping creation --
+	
+--called when the user presses the ping button
+--on pressing the ping button, raycast for a valid target/position
+--then generate data for that waypoint accordingly
+function QuickChat:CreatePing(ping_type)
+	local params = ping_type and self.waypoint_parameters[ping_type]
+	if not params then 
+		self:log("ERROR: Bad ping_type: QuickChat:CreatePing(" .. tostring(ping_type) .. ")")
+		return
+	end
+	
+	
+	local create_ping = params.create_ping
+
+--played locally; sync handled separately
+	local sound_id
+	local anim_id
+	
+	if not create_ping then 
+		sound_id = params.sound_id
+		anim_id = params.anim_id
+		
+		--perform local actions (viewmodel redirect, voiceline)
+		if sound_id then 
+			if type(sound_id) == "table" then 
+				sound_id = table.random(sound_id)
+			elseif type(params.sound_id) == "string" then 
+				--sound_id should be a string
+			end
+		end
+		if sound_id then 
+			self:PlayCriminalSound(sound_id,true)
+		end
+		
+		if anim_id then 
+			self:PlayViewmodelAnimation(anim_id)
+		end
+		return
+	end
+	
+	local viewport_cam = managers.viewport:get_current_camera()
+	if not viewport_cam then 
+		--doesn't typically happen, usually for only a brief moment when all four players go into custody
+		return 
+	end
+	
+	local cam_pos = viewport_cam:position()
+	local cam_aim = viewport_cam:rotation():y()
+	local to_pos = (cam_aim * self.tweak_data.max_raycast_distance) + cam_pos
+	
+	local ray = World:raycast("ray",cam_pos,to_pos,"slot_mask",params.slotmask + self.cast_slotmasks.world)
+	local hit_unit = ray and ray.unit
+	local hit_position = ray and ray.position
+	if not (hit_unit or hit_position) then 
+		self:log("No unit found!")
+		return
+	end
+	
+	local user_id = self.USER_ID --"local_user"
+	local contextual = params.contextual
+	local normal = ray.normal --not used yet
+	local interaction_tweak_id
+	local is_interactable = false
+--used for HUD feed
+	local target_name
+	local target_category
+	
+	
+	
+	--creation parameters:
+	local waypoint_id = self.num_waypoints + 1
+	local icon_id
+	local icon_type
+	local text_id
+	local custom_text
+	local color
+	local duration
+	local is_world = hit_unit:in_slot(QuickChat.cast_slotmasks.world)
+	local is_character = false
+	local is_dead = false
+	local light_enabled = self:IsSpotlightEnabled()
+	local workspace_enabled = false
+	local unit
+	
+	
+	if not is_world then 
+		unit = hit_unit
+	end
+	
+	if unit then
+		if unit.character_damage and unit:character_damage() then
+
+			local dmg_extension = unit:character_damage()
+			is_character = true
+			is_dead = dmg_extension:dead()
+			
+		elseif continue and unit:in_slot(8) and alive(unit:parent()) then 
+			--if the raycast unit is the shield equipment held by a Shield enemy,
+			--find that Shield enemy instead of the shield equipment itself
+
+			local dmg_extension = parent.character_damage and parent:character_damage()
+			is_character = true
+			is_dead = dmg_extension:dead()
+		end
+		--todo check team (civilian, enemy, joker/hired help, teammate ai, player)
+	end
+	
+	if unit then 
+		--if the ping raycast hits a valid unit (enemy, civilian, interactable, etc; ie, not world geometry),
+		--synced remove any user pings on that unit
+		for i=#self.active_waypoints[user_id],1,-1 do 
+			local _waypoint_data = self.active_waypoints[user_id][i]
+			if _waypoint_data and alive(_waypoint_data.unit) and _waypoint_data.unit:key() == unit_key then 
+				local old_waypoint_data = self:RemoveWaypoint(user_id,i)
+				--break --replace the marker
+				return --or cancel entirely
+			end
+		end
+	
+	
+		--check for valid interaction on unit
+		local interaction_ext = unit.interaction and unit:interaction()
+		if interaction_ext then 
+			if interaction_ext:disabled() and interaction_ext:active() and interaction_ext:can_interact() then
+				is_interactable = true
+				interaction_tweak_id = interaction_ext.tweak_data
+			end
+		end
+	end
+	
+	--if generic ping, automatically determine the icon, text, etc.
+	if contextual then 
+		if is_interactable then 
+			params = self.waypoint_parameters.interact
+			if interaction_tweak_id then 
+				
+				local interaction_tweak_data = tweak_data.interaction[interaction_tweak_id]
+				local contextual_interaction_data = self.tweak_data.contextual_interactions[interaction_tweak_id]
+				if contextual_interaction_data then 
+					sound_id = contextual_interaction_data.sound_id
+					anim_id = contextual_interaction_data.anim_id
+					
+					params = self.tweak_data.waypoint_parameters[contextual_interaction_data.ping_type] or params
+				end
+			end
+		else
+			--other case-specific bases
+		end
+	end
+	
+	
+	icon_id = icon_id or params.icon_id
+	icon_type = icon_type or params.icon_type
+	text_id = text_id or params.text_id
+	custom_text = custom_text or params.custom_text
+	color = color or params.color
+	
+	if params.sound_id and not sound_id then 
+		if type(params.sound_id) == "table" then 
+			sound_id = table.random(params.sound_id)
+		elseif type(params.sound_id) == "string" then 
+			sound_id = params.sound_id
+		end
+	end
+	if sound_id then 
+		self:PlayCriminalSound(sound_id,true)
+	end
+	if params.anim_id and not anim_id then 
+		anim_id = params.anim_id
+	end
+	
+	if anim_id then 
+		self:PlayViewmodelAnimation(anim_id)
+	end
+	
+	local my_peer_id = managers.network:session():local_peer():id()
+	local peer_color = tweak_data.chat_colors[my_peer_id or 5]
+	
+	local creation_data = {
+		waypoint_id = waypoint_id,
+		user_id = user_id,
+		icon_id = icon_id,
+		icon_type = icon_type,
+		text_id = text_id,
+		custom_text = custom_text,
+		peer_color = peer_color,
+		color = color,
+		position = hit_position,
+		unit = unit,
+		is_world = is_world,
+		is_character = is_character,
+		is_dead = is_dead,
+		light_enabled = light_enabled,
+		workspace_enabled = workspace_enabled,
+		inherit = nil
+	}
+	
+	local waypoint_data = self:AddWaypoint(creation_data)
+	if waypoint_data then 
+		waypoint_data.color = color
+		waypoint_data.beam_color = color
+		waypoint_data.unit = unit
+		waypoint_data.ping_type = ping_type
+		waypoint_data.position = hit_position
+		if params.duration then 
+			params.end_t = params.duration + Application:time()
+		end
+		waypoint_data.waypoint_id = waypoint_id
+		waypoint_data.is_dead = is_dead
+		waypoint_data.is_character = is_character
+		waypoint_data.is_world = is_world
+		waypoint_data.creation_data = creation_data
+		
+		self.num_waypoints = waypoint_id --incremented waypoint counter
+		self:log("You pinged " .. tostring(target_category) .. " - " .. tostring(target_name))
+		
+		
+		if #self.active_waypoints[user_id] > self:GetMaxPingsPerPlayer() then 
+			self:RemoveWaypoint(user_id,#self.active_waypoints[user_id])
+		end
+		
+		self:RegisterWaypoint(user_id,waypoint_data)
+	end
+	
+end
+
+--create hud indicators with this waypoint data
+--[[ table creation_data:
+	waypoint_id: the unique identifier for this waypoint. presented as an int, which incremements +1 with each waypoint from its parent user. can be used to retrieve or destroy this specific waypoint
+	icon_id: string. the identifier for the icon. used in conjunction with icon_type to determine the icon
+	icon_type: int. determines where to retrieve the texture from, in conjunction with icon_id. [1] indicates hudiconstweakdata source; [2] indicates premade (texture and texture_rect determined by this mod's tweakdata instead).
+	text_id: the identifier for the string that should be displayed alongside this waypoint, as according to this mod's tweakdata. localized.
+	custom_text: the custom text that should be displayed alongside this waypoint. can be disabled for waypoints from other players. not localized.
+	color: Color or string. If string, auto-converts to Color. Determines the icon color, beam color, and spotlight color.
+	position: Vector3. The position for this waypoint.
+	unit: Unit. The unit to attach the custom workspace to, if enabled.
+	is_world: boolean. indicates whether this waypoint is a static positional waypoint. if true, does not use the raycasted unit as the waypoint position for updating the waypoint position.
+	is_character: boolean. indicates whether this waypoint is a dynamically-positioned waypoint; if true, updates the waypoint position every frame according to the unit.
+	light_enabled: boolean. 
+	light_rotation: if true,
+	workspace_enabled: boolean. if true, creates a world workspace along with the waypoint data.
+	inherit: a list of keys, corresponding to keys of items in parameters. for each key present in inherit, it will be duplicated directly to the resulting output table
+	
+	--this is agnostic of the owner user and can be called either from local user waypoints or from other players syncing waypoints
+--]]
+function QuickChat:AddWaypoint(creation_data)
+	local parent_panel = managers.hud._workspace:panel()
+	if alive(parent_panel) then
+		local waypoint_id = tostring(creation_data.waypoint_id)
+		
+		local light_enabled = creation_data.light_enabled
+		local workspace_enabled = creation_data.workspace_enabled
+		local is_world = creation_data.is_world
+		local is_character = creation_data.is_character
+		local position = creation_data.position
+		local peer_color = creation_data.peer_color or Color.white
+		local owner_id = creation_data.user_id
+		
+		local waypoint_data = {
+			position = position
+		}
+		
+		--get icon data
+		local texture,texture_rect
+		local icon_id = creation_data.icon_id
+		local icon_type = creation_data.icon_type
+		if icon_id then 
+			if icon_type == 1 then 
+				texture,texture_rect = tweak_data.hud_icons:get_icon_data(icon_id)
+			elseif icon_type == 2 then 
+				local icon_tweakdata = self.tweak_data.premade_icons[icon_id]
+				if icon_tweakdata then 
+					texture = icon_tweakdata.texture
+					texture_rect = icon_tweakdata.texture_rect
+					--todo icon-specific w/h ratio from tweakdata
+				end
+			end
+		end
+		if not texture then 
+			self:log("ERROR: AddWaypoint() from owner " .. tostring(owner_id) .. ", waypoint_id " .. tostring(waypoint_id) .. " gave invalid icon: " .. tostring(icon_id) .. " (" .. type(icon_type) .. " " .. tostring(icon_type) .. ")")
+			return
+		end
+		
+		--get text data
+		local text
+		local text_id = creation_data.text_id
+		local custom_text = creation_data.custom_text
+		if custom_text and (owner_id == self.USER_ID or self:ShouldAllowSyncCustomText()) then 
+			text = custom_text
+		elseif text_id then 
+			local _text_id = self.tweak_data.premade_text_messages[text_id]
+			if _text_id then 
+				text = managers.localization:text(_text_id)
+			end
+		end
+		if not text then 
+			self:log("ERROR: No valid text for text_id " .. tostring(text_id))
+			return
+		end
+		
+		
+		--create gui objects
+		local bitmap_size = self.tweak_data.gui_bitmap.size
+		local panel = parent_panel:panel({
+			name = waypoint_id,
+			w = self.tweak_data.gui_panel.w,
+			h = self.tweak_data.gui_panel.h
+		})
+		waypoint_data._panel = panel
+		
+		local bitmap = panel:bitmap({
+			name = "bitmap",
+			texture = texture,
+			texture_rect = texture_rect,
+			color = color,
+			alpha = self.tweak_data.gui_bitmap.alpha,
+			layer = self.tweak_data.gui_bitmap.layer
+		})
+		bitmap:set_y((panel:h() - bitmap:h()) / 2)
+		waypoint_data._bitmap = bitmap
+		
+		local rect = panel:rect({
+			w = bitmap_size,
+			h = bitmap_size,
+			rotation = self.tweak_data.gui_rect.rotation,
+			alpha = self.tweak_data.gui_rect.alpha,
+			layer = self.tweak_data.gui_rect.layer,
+			color = peer_color
+		})
+		waypoint_data._rect = rect
+		rect:set_center(bitmap:center())
+		
+		waypoint_data.x_offset = -bitmap_size / 2
+		
+		local text = panel:text({
+			name = "text",
+			text = tostring(text),
+			align = "left",
+			x = bitmap_size * 1.5,
+			font = self.tweak_data.gui_text.font,
+			font_size = self.tweak_data.gui_text.font_size,
+			vertical = "center",
+			alpha = self.tweak_data.gui_text.alpha,
+			layer = self.tweak_data.gui_text.layer,
+			color = self.tweak_data.gui_text.color
+		})
+		waypoint_data._text = text
+		
+		if workspace_enabled then 
+			--todo floor workspace 
+			
+			local w = self.tweak_data.gui_workspace.w
+			local h = self.tweak_data.gui_workspace.h
+			local world_w = w * self.tweak_data.gui_workspace.world_scale
+			local world_h = h * self.tweak_data.gui_workspace.world_scale
+			
+			local start_pos = position or start_pos
+			
+			local ws = self._gui:create_world_workspace(world_w,world_h,start_pos - Vector3(0,world_h/2,0),Vector3(world_w,0,0),Vector3(0,world_h,0))
+			
+			ws:set_billboard(Workspace.BILLBOARD_BOTH)
+			
+			ws:panel():rect({
+				name = "debug",
+				color = color,
+				alpha = 0.25
+			})
+			
+			--mysteriously nonfunctional
+			ws:panel():bitmap({
+				name = "bitmap",
+				w = w,
+				h = h,
+				texture = tweak_data.hud_icons.wp_arrow.texture,
+				texture_rect = tweak_data.hud_icons.wp_arrow.texture_rect,
+				color = Color.white,
+				alpha = self.tweak_data.gui_bitmap.alpha
+			})
+			
+			if unit and not is_world then 
+				local head_obj = unit:get_object(Idstring("Head"))
+				if is_character and head_obj then 
+					local attachment_obj = head_obj or unit:orientation_object()
+					local oobb = attachment_obj:oobb()
+					ws:set_linked(world_w,world_h,attachment_obj,oobb:center() - Vector3(0,world_h/2,0),Vector3(world_w,0,0),Vector3(0,world_h,0))
+				else
+					local attachment_obj = unit:orientation_object()
+					ws:set_linked(world_w,world_h,attachment_obj,attachment_obj:position() - position,Vector3(world_w,0,0),Vector3(0,world_h,0))
+				end
+			end
+			waypoint_data._workspace = ws
+		end
+		
+		--create spotlight
+		if light_enabled then 
+			local light_texture = creation_data.light_texture or self.tweak_data.spotlight.texture 
+			local spotlight = World:create_light("spot|specular|plane_projection", light_texture)
+			waypoint_data._spotlight = spotlight
+			spotlight:set_position(creation_data.position + self.tweak_data.spotlight.offset_position)
+			spotlight:set_color(creation_data.color or Color())
+			spotlight:set_spot_angle_end(self.tweak_data.spotlight.angle or 60)
+			spotlight:set_far_range(self.tweak_data.spotlight.range or 10000)
+			spotlight:set_multiplier(self.tweak_data.spotlight.mul_index or 2)
+			local spot_rot = creation_data.light_rotation or self.tweak_data.spotlight.rotation
+			if spot_rot then
+				spotlight:set_rotation(spot_rot)
+			end
+			spotlight:set_enable(true)
+		end
+		
+		--pass on any creation parameters specified
+		if creation_data.inherit and type(creation_data.inherit) == "table" then 
+			for _,key in pairs(creation_data.inherit) do 
+				waypoint_data[key] = creation_data[key]
+			end
+		end
+		
+		return waypoint_data
+	else
+		self:log("ERROR: AddWaypoint() failed- parent panel does not exist")
+	end
+end
+
+
+function QuickChat:RemoveWaypoint(id64,index)
+	local waypoint = self:UnregisterWaypoint(id64,index)
+	if waypoint then 
+		if id64 == self.USER_ID then 
+			self:SyncRemoveWaypointToPeers(waypoint.waypoint_id)
+		end
+		self:DestroyWaypoint(waypoint)
+	end
+end
+
+--register user waypoint (both from local user and from peers)
+function QuickChat:RegisterWaypoint(id64,waypoint_data)
+	if id64 then 
+		self.active_waypoints[id64] = self.active_waypoints[id64] or {}
+		table.insert(self.active_waypoints[id64],1,waypoint_data)
+		
+		if id64 == self.USER_ID then 
+			self:SyncWaypointToPeers(waypoint_data)
+		end
+		return true
+	else
+		self:log("ERROR: QuickChat:RegisterWaypoint(" .. tostring(id64) .. "): Bad id64!")
+	end
+end
+
+function QuickChat:UnregisterWaypoint(id64,index)
+	if id64 and index and self.active_waypoints[id64] and self.active_waypoints[id64][index] then 
+		return table.remove(self.active_waypoints[id64],index)
+	end
+end
+
+function QuickChat:DestroyWaypoint(waypoint_data)
+	if waypoint_data._workspace then 
+		self._gui:destroy_workspace(waypoint_data._workspace)
+		waypoint_data._workspace = nil
+	end
+	if alive(waypoint_data._panel) then 
+		
+		waypoint_data._panel:parent():remove(waypoint_data._panel)
+		waypoint_data._panel = nil
+		
+		waypoint_data._bitmap = nil
+		waypoint_data._text = nil
+	end
+	
+	if waypoint_data._spotlight then 
+		if waypoint_data._spotlight ~= -1 then 
+			World:delete_light(waypoint_data._spotlight)
+		end
+		waypoint_data._spotlight = nil
+	end
+	
+end
+
+function QuickChat:FadeoutDestroyWaypoint(waypoint_data)
+	local function fadeout_func(o)
+		local dt = coroutine.yield()
+		over(self:GetWaypointFadeoutDuration(),function(progress)
+			local n = 1 - progress
+			o:set_alpha(n * n)
+		end)
+		self:DestroyWaypoint(waypoint_data)
+	end
+	
+	if waypoint_data._panel then 
+		waypoint_data._panel:animate(fadeout_func)
+	end
+end
+
+function QuickChat:ReceiveWaypoint(peer,ping_data)
+	local id64 = peer:user_id()
+	self.active_waypoints[id64] = self.active_waypoints[id64] or {}
+	
+	if #self.active_waypoints[id64] >= self:GetMaxPingsPerPlayer() then 
+		local old_waypoint = self:RemoveWaypoint(id64,#self.active_waypoints[id64])
+		--fadeout waypoint, not instant removal
+	end
+	local waypoint_data = self:AddWaypoint(waypoint_data)
+	if waypoint_data then 
+		table.insert(self.active_waypoints[id64],1,waypoint_data)
+	end
+end
+
+function QuickChat:GetWaypointById(id64,id)
+	return self.active_waypoints[id64] and self.active_waypoints[id64][id]
+end
+
+function QuickChat:ClearAllWaypointsByPeer(id64)
+	if self.active_waypoints[id64] then 
+		for i=#self.active_waypoints[id64],1,-1 do 
+			local waypoint_data = table.remove(self.active_waypoints[id64],i)
+			if waypoint_data then 
+				self:DestroyWaypoint(waypoint_data)
+			end
+		end
+	end
+end
+
+function QuickChat:ClearAllWaypoints()
+	for user_id,waypoints_list in pairs(self.active_waypoints) do 
+		for i=#waypoints_list,1,-1 do 
+			local waypoint_data = table.remove(waypoints_list,i)
+			if waypoint_data then 
+				if user_id == self.USER_ID then 
+					self:SyncRemoveWaypointToPeers(waypoint_data.waypoint_id)
+				end
+				self:DestroyWaypoint(waypoint_data)
+			end
+		end
+	end
+end
+
+	-- Network/syncing --
+
+function QuickChat:RegisterPeer(peer,version_id)
+	self.registered_peers[peer:user_id()] = self.registered_peers[peer:user_id()] or {}
+	self.registered_peers[peer:user_id()].version_id = version_id
+end
+
+function QuickChat:SyncWaypointToPeers(waypoint_data)
+	local waypoint_string = self:GetWaypointString(waypoint_data.creation_data)
+	if waypoint_string then 
+		local session = managers.network:session()
+		for _,peer in pairs(session:all_peers()) do 
+			local id64 = peer:user_id()
+			local peer_data = self.registered_peers[id64] 
+			local network_message = self._network_data.current_sync_ids.add
+			if peer_data and peer_data.version_id then 
+				if self._network_data.sync_functions_by_version[peer_data.version_id] then 
+					network_message = self._network_data.sync_functions_by_version[peer_data.version_id].add or network_message
+				end
+			end
+			LuaNetworking:SendToPeer(peer:id(),network_message,waypoint_string)
+		end
+	end
+end
+
+function QuickChat:SyncRemoveWaypointToPeers(waypoint_id)
+	if waypoint_id then 
+		local session = managers.network:session()
+		for _,peer in pairs(session:all_peers()) do 
+			local id64 = peer:user_id()
+			local peer_data = self.registered_peers[id64] 
+			local network_message = self._network_data.current_sync_ids.remove
+			if peer_data and peer_data.version_id then 
+				if self._network_data.sync_functions_by_version[peer_data.version_id] then 
+					network_message = self._network_data.sync_functions_by_version[peer_data.version_id].remove or network_message
+				end
+			end
+			LuaNetworking:SendToPeer(peer:id(),network_message,waypoint_id)
+		end
+	end
+end
+
+--syncs waypoints belonging to the local peer to the new drop-in
+--todo do these on a slight delay so as not to cause hitching when there are large numbers of waypoints
+	--note: peer should be checked in this case to ensure that the peer is still connected and prevent errors
+function QuickChat:SyncWaypointsToDropInPeer(peer)
+	local peer_id = peer:id()
+	for i,waypoint_data in pairs(self.active_waypoints[self.USER_ID]) do 
+		local waypoint_string = self:GetWaypointString(waypoint_data.creation_data)
+		
+		local peer_data = self.registered_peers[id64] 
+		local network_message = self._network_data.current_sync_ids.add
+		if peer_data and peer_data.version_id then 
+			if self._network_data.sync_functions_by_version[peer_data.version_id] then 
+				network_message = self._network_data.sync_functions_by_version[peer_data.version_id].add or network_message
+			end
+		end
+		LuaNetworking:SendToPeer(peer:id(),network_message,waypoint_string)
+		
+		LuaNetworking:SendToPeer(peer:id(),network_message,waypoint_string)
+
+	end
+end
+
+--todo valid checking for all parameters
+function QuickChat:GetWaypointString(data)
+	local waypoint_id = data.waypoint_id
+	local text_id = data.text_id
+	local custom_text = " "
+	if self:ShouldAllowSyncCustomText() then 
+		custom_text = data.custom_text or " "
+	end
+	local icon_type = data.icon_type
+	local icon_id = data.icon_id
+	local end_t = data.duration and (data.duration + Application:time()) or data.end_t or "nil"
+	local show_timer = tostring(data.show_timer and true or false)
+	local position = data.position and math.vector_to_string(data.position)
+	local uid
+	local is_world = data.is_world
+	if data.unit and not is_world then 
+		uid = data.unit:id()
+		--get syncable unit id number
+	else
+		uid = "nil"
+	end
+	local is_character = data.is_character
+	local is_dead = data.is_dead
+	if waypoint_id and text_id and icon_type and icon_id and position then
+		return table.concat({
+			tostring(waypoint_id),
+			tostring(text_id),
+			tostring(custom_text),
+			tostring(icon_type),
+			tostring(icon_id),
+			end_t,
+			show_timer,
+			position,
+			uid,
+			tostring(is_character),
+			tostring(is_world),
+			tostring(is_dead)
+		},"|")
+	else
+		self:log("QuickChat:GetWaypointString(" .. tostring(data) .. "): Unable to pack waypoint- missing parameters!")
+		self:log(
+		"data: < waypoint_id = " ..
+		tostring(data.waypoint_id) ..
+		", text_id = " .. 
+		tostring(data.text_id) ..
+		", icon_type = " .. 
+		tostring(data.icon_type) ..
+		", icon_id = " .. 
+		tostring(data.icon_id) ..
+		", position = " .. 
+		tostring(data.position) ..
+		" />")
+	end
+end
+
 --used for incoming sync waypoints
-function QuickChat:FindTargetUnit(id,mask)
+function QuickChat.FindTargetUnit(id,mask)
 	for _,unit in pairs(World:find_units_quick("all", mask)) do
 		if unit:id() == id then
 			return unit
@@ -915,13 +1757,262 @@ function QuickChat:FindTargetUnit(id,mask)
 	end
 end
 
-	-- Ping creation --
-	
---called when the user presses the ping button
 
---on pressing the ping button, raycast for a valid target/position
---then generate data for that waypoint accordingly
-function QuickChat:CreatePing(ping_type)
+--on network message received:
+Hooks:Add("NetworkReceivedData", "NetworkReceivedData_QuickChat", function(sender, message_id, message)
+	local peer = managers.network:session():peer(sender)
+	if not peer or managers.chat and managers.chat:is_peer_muted(peer) then
+		--don't do anything because peer is muted
+		--blocked. unfollowed. reported.
+	else
+		local func_name = message_id and QuickChat._network_data.sync_functions_by_name[message_id] --whitelist so that peers can't remotely execute functions willy-nilly
+		if message_id and func_name then 
+			if func_name and type(QuickChat[func_name]) == "function" then 
+				local success,e = QuickChat[func_name](QuickChat,message)
+				if not success then 
+					QuickChat:log("NetworkReceivedData_QuickChat: Failed to receive sync data. No valid ping_data found! Sender " .. tostring(sender) .. ", message_id " .. tostring(message_id) .. " message < " .. tostring(message) .. " >")
+					if e then 
+						QuickChat:log(tostring(e))
+					end
+				end
+			end
+		end
+	end
+end)
+
+function QuickChat:Register_v1(peer,message)
+	local version_id = message
+	self:RegisterPeer(peer,version_id)
+end
+
+function QuickChat:SyncAddWaypoint_v1(peer,message)
+	local data = string.split(message,"|")
+	if data then 
+		local string_to_bool = QuickChat.string_to_bool
+		local utf8_len = utf8.len
+	
+		local waypoint_id_str = data[1]
+		local waypoint_id = waypoint_id_str and tonumber(waypoint_id_str)
+		if not waypoint_id then 
+			return false,"Invalid waypoint_id: " .. tostring(waypoint_id_str)
+		end
+		
+		local text_id = data[2]
+		if not text_id or utf8_len(text_id) == 0 then
+			return false,"Invalid text_id: " .. tostring(text_id)
+		end
+		
+		local custom_text
+		local custom_text_str = data[3]
+		if utf8_len(custom_text_str) <= 1 then 
+			custom_text = nil
+		end
+		
+		local icon_type_str = data[4]
+		local icon_type = icon_type_str and tonumber(icon_type_str)
+		if not icon_type then 
+			return false,"Invalid icon_type: " .. tostring(icon_type)
+		end
+		
+		local icon_id = data[5]
+		if not text_id or utf8_len(text_id) <= 1 then 
+			return false,"Invalid icon_id: " .. tostring(icon_id)
+		end
+		
+		local end_t_str = data[6]
+		local end_t = end_t_str and tonumber(end_t_str)
+		
+		local show_timer_str = data[7]
+		local show_timer = string_to_bool(show_timer_str)
+		
+		local position_str = data[8]
+		local position = position_str and math.string_to_vector(position_str)
+		if not position then 
+			return false,"Invalid position: " .. tostring(position_str)
+		end
+		
+		local uid_str = data[9]
+		local uid = uid_str and tonumber(uid_str)
+		local mask = self.tweak_data.cast_slotmasks.all
+			--todo sync a slotmask identifier to reduce search overhead
+		local unit = uid_str and QuickChat.FindTargetUnit(uid,mask)
+		if unit and alive(unit) then 
+			self:log("Successfully found synced unit " .. tostring(unit:key()) .. " from uid " .. tostring(uid))
+		else
+			self:log("No unit found from synced uid " .. tostring(uid))
+		end
+		
+		local is_character_str = data[10]
+		local is_character = string_to_bool(is_character_str)
+		
+		local is_world_str = data[11]
+		local is_world = string_to_bool(is_world_str)
+		
+		local is_dead_str = data[12]
+		local is_dead = string_to_bool(is_dead_str)
+		
+		local peer_id = peer:id()
+		local peer_color = tweak_data.chat_colors[peer_id or 5] or Color(0,1,1)
+		
+		local params = {
+			waypoint_id = waypoint_id,
+			text_id = text_id,
+			custom_text = custom_text,
+			peer_color = peer_color,
+			icon_type = icon_type,
+			icon_id = icon_id,
+			end_t = end_t,
+			show_timer = show_timer,
+			position = position,
+			unit = unit,
+			is_character = is_character,
+			is_world = is_world,
+			is_dead = is_dead,
+			
+			light_enabled = true,
+			workspace_enabled = false
+		}
+		local waypoint_data = self:AddWaypoint(params)
+		if waypoint_data then 
+			local id64 = peer:user_id()
+			local success = self:RegisterWaypoint(id64,waypoint_data)
+			local e 
+			if not success then 
+				e = "Could not register user " .. tostring(id64)
+			end
+			return success,e
+		else
+			return false,"AddWaypoint() failed"
+		end
+	end
+end
+
+function QuickChat:SyncRemoveWaypoint_v1(peer,message)
+	local waypoint_id = message
+	local waypoint = self:UnregisterWaypoint(peer:user_id(),waypoint_id)
+	if waypoint then 
+		self:DestroyWaypoint(waypoint)
+	end
+end
+
+	-- Menu --
+Hooks:Add("MenuManagerInitialize", "MenuManagerInitialize_QuickChat", function(menu_manager)
+	
+--	QuickChat.chat_radial = RadialMouseMenu:new(QuickChat._chat_radial_data,callback(QuickChat,QuickChat,"set_chat_radial_menu")) or QuickChat.chat_radial
+	
+	MenuCallbackHandler.callback_quickchat_setting_max_pings_per_player = function(self,item) --not yet implemented
+		local value = tonumber(item:value())
+		for user_id,waypoints_list in pairs(QuickChat.active_waypoints) do 
+			if value < #QuickChat.active_waypoints then
+				for i=#waypoints_list,#waypoints_list-value,-1 do 
+					QuickChat:RemoveWaypoint(user_id,i)
+				end
+			end
+		end
+		
+	end
+	
+	MenuCallbackHandler.callback_pingwaypoint_debug = function(self,item)
+		QuickChat.settings.debug_log_enabled = item:value() == "on"
+		QuickChat:Save()
+	end
+	
+	
+	MenuCallbackHandler.callback_pingwaypoint_max_pings_per_player = function(self,item)
+		QuickChat.settings.max_pings_per_player = tonumber(item:value())
+		QuickChat:Save()
+	end
+	
+	MenuCallbackHandler.func_pingwaypoint_keybind_ping = function(self)
+		QuickChat:log("This should not be called")
+	end
+	
+	MenuCallbackHandler.callback_quickchat_mainmenu_close = function(self)
+		QuickChat:Save()
+	end
+
+	QuickChat:Load()
+	QuickChat:OnLoad()
+	--after all user waypoints are loaded, 
+	--generate the radial menu by combining the template and the selected waypoints data
+	local radial_menu_data = QuickChat.radial_menu_data
+	RadialMouseMenu:new(radial_menu_data,callback(QuickChat,QuickChat,"SetRadialMenu","ping_menu"))
+	
+	MenuHelper:LoadFromJsonFile(QuickChat._menu_path .. "options.json", QuickChat, QuickChat.settings)		
+end)
+
+
+	-- Localization (if BeardLib is installed, defers to BeardLib Localization Module) --
+Hooks:Add("LocalizationManagerPostInit", "LocalizationManagerPostInit_QuickChat", function( loc )
+	if not BeardLib then 
+		loc:load_localization_file( QuickChat._localization_path .. "english.txt")
+	end
+end)	
+
+
+	-- I/O --
+
+function QuickChat:Load()
+	self:LoadSettings()
+	self:LoadWaypoints()
+end
+
+function QuickChat:Save()
+	self:SaveSettings()
+	self:SaveWaypoints()
+end
+
+function QuickChat:LoadWaypoints()
+	local file = io.open(self._waypoints_save_path, "r")
+	if (file) then
+		for k, v in pairs(json.decode(file:read("*all"))) do
+			self.user_waypoints[k] = v
+		end
+	else
+		self:SaveWaypoints()
+	end
+	return self.user_waypoints
+end
+
+function QuickChat:SaveWaypoints()
+	local file = io.open(self._waypoints_save_path,"w+")
+	if file then
+		file:write(json.encode(self.user_waypoints))
+		file:flush()
+		file:close()
+	end
+end
+
+function QuickChat:LoadSettings()
+	local file = io.open(self._save_path, "r")
+	if (file) then
+		for k, v in pairs(json.decode(file:read("*all"))) do
+			self.settings[k] = v
+		end
+	else
+		self:SaveSettings()
+	end
+	return self.settings
+end
+
+function QuickChat:SaveSettings()
+	local file = io.open(self._save_path,"w+")
+	if file then
+		file:write(json.encode(self.settings))
+		file:flush()
+		file:close()
+	end
+end
+
+
+
+
+
+
+do return end
+
+
+function QuickChat:OLDCreatePing(ping_type)
 	local params = ping_type and self.waypoint_parameters[ping_type]
 	if not params then 
 		self:log("ERROR: Bad ping_type: QuickChat:CreatePing(" .. tostring(ping_type) .. ")")
@@ -992,7 +2083,7 @@ function QuickChat:CreatePing(ping_type)
 		--search for interactable objects
 		local interaction_ext = hit_unit.interaction and hit_unit:interaction()
 		if interaction_ext then 
-			if not interaction_ext._disabled and interaction_ext:active() and interaction_ext:can_interact() then 
+			if not interaction_ext:disabled() and interaction_ext:active() and interaction_ext:can_interact() then 
 				unit = hit_unit or unit
 				local interaction_tweak_id = interaction_ext.tweak_data
 				local contextual_interaction_data = interaction_tweak_id and self.tweak_data.contextual_interactions[interaction_tweak_id]
@@ -1146,32 +2237,39 @@ function QuickChat:CreatePing(ping_type)
 	end
 end
 	
---create hud indicators with this waypoint data
---[[
-parameters:
-	id: the unique identifier for this waypoint. presented as an int, which incremements +1 with each waypoint from its parent user.
-	icon_id: string. the identifier for the icon. used in conjunction with icon_type to determine the icon
-	icon_type: int. determines where to retrieve the texture from, in conjunction with icon_id. [1] indicates hudiconstweakdata source; [2] indicates premade (texture and texture_rect determined by this mod's tweakdata instead).
-	text_id: the identifier for the string that should be displayed alongside this waypoint, as according to this mod's tweakdata. localized.
-	custom_text: the custom text that should be displayed alongside this waypoint. can be disabled for waypoints from other players. not localized.
-	is_world: boolean. indicates whether this waypoint is a static positional waypoint
-	color: Color or string. If string, auto-converts to Color. Determines the icon color, beam color, and spotlight color.
-	position: Vector3. The position for this waypoint.
-	is_character: boolean. 
-	--todo finish
---]]
-function QuickChat:AddWaypoint(creation_data)
+function QuickChat:OLDAddWaypoint(creation_data)
 	local parent_panel = managers.hud._workspace:panel()
 	if alive(parent_panel) then 
 		local texture,texture_rect = creation_data.texture,creation_data.texture_rect
-		local text = creation_data.text
+	
+		local text = "dummy text here"
+		local text_id = creation_data.text_id
+		local custom_text = creation_data.text
+		if text_id then
+			
+		end
+		
+		local icon_id = creation_data.icon_id
+		local icon_type = creation_data.icon_type
+		if icon_id then 
+			if icon_type == 1 then 
+				texture,texture_rect = tweak_data.hud_icons:get_icon_data(icon_id)
+			elseif icon_type == 2 then 
+				local icon_tweakdata = self.tweak_data.premade_icons[icon_id]
+				if icon_tweakdata then 
+					texture = icon_tweakdata.texture
+					texture_rect = icon_tweakdata.texture_rect
+				end
+			end
+		end
+	
 		
 		--create panel for waypoint, and all the bits
 		local waypoint_data = {
 			creation_data = creation_data
 		}
 		
-		local bitmap_size = 24
+		local bitmap_size = self.tweak_data.gui_bitmap.size
 		local panel = parent_panel:panel({
 			name = creation_data.id,
 			w = 200,
@@ -1208,16 +2306,15 @@ function QuickChat:AddWaypoint(creation_data)
 			x = bitmap_size * 1.5,
 	--		x = -100,
 	--		y = -100,
-			font = "fonts/font_medium_shadow_mf",
-			font_size = 24,
+			font = self.tweak_data.gui_text.font,
+			font_size = self.tweak_data.gui_text.font_size,
 			vertical = "center",
-			alpha = 0.8,
+			alpha = self.tweak_data.gui_text.alpha,
 			layer = 3,
 			color = Color.white
 		})
 		
-		local do_workspace = false
-		if do_workspace then
+		if creation_data.workspace_enabled then
 			local w = 100
 			local h = 800
 			local world_w = w * 0.1
@@ -1241,7 +2338,8 @@ function QuickChat:AddWaypoint(creation_data)
 				h = h,
 				texture = tweak_data.hud_icons.wp_arrow.texture,
 				texture_rect = tweak_data.hud_icons.wp_arrow.texture_rect,
-				color = creation_data.color
+				color = creation_data.color,
+				alpha = self.tweak_data.gui_bitmap.alpha
 			})
 			
 			--[[
@@ -1278,182 +2376,29 @@ function QuickChat:AddWaypoint(creation_data)
 		
 		if creation_data.light_enabled then 
 			local light_texture = _G.lighttexture or creation_data.light_texture or "units/lights/spot_light_projection_textures/spotprojection_11_flashlight_df" 
-			local light = World:create_light("spot|specular|plane_projection", light_texture)
-			waypoint_data._light = light
-			light:set_position(creation_data.position + self.tweak_data.spotlight.offset_position)
-			light:set_color(creation_data.color or Color())
-			light:set_spot_angle_end(self.tweak_data.spotlight.angle or 60)
-			light:set_far_range(self.tweak_data.spotlight.range or 10000)
-			light:set_multiplier(self.tweak_data.spotlight.mul_index or 2)
+			local spotlight = World:create_light("spot|specular|plane_projection", light_texture)
+			waypoint_data._spotlight = spotlight
+			spotlight:set_position(creation_data.position + self.tweak_data.spotlight.offset_position)
+			spotlight:set_color(creation_data.color or Color())
+			spotlight:set_spot_angle_end(self.tweak_data.spotlight.angle or 60)
+			spotlight:set_far_range(self.tweak_data.spotlight.range or 10000)
+			spotlight:set_multiplier(self.tweak_data.spotlight.mul_index or 2)
 			local spot_rot = creation_data.rotation or Rotation()
 			local td_spot_rot = self.tweak_data.spotlight.rotation or Rotation()
 			spot_rot = Rotation(spot_rot:yaw() + td_spot_rot:yaw(),spot_rot:pitch() + td_spot_rot:pitch(),spot_rot:roll() + td_spot_rot:roll())
-			light:set_rotation(spot_rot)
-			light:set_enable(true)
+			spotlight:set_rotation(spot_rot)
+			spotlight:set_enable(true)
 		end
 		
 		return waypoint_data
 	else
 		self:log("ERROR: AddWaypoint() failed- parent panel does not exist")
 	end
-	
 	return false
 end
 
-function QuickChat:RemoveWaypoint(id64,index)
-	local waypoint = self:UnregisterWaypoint(id64,index)
-	if waypoint then 
-		self:DestroyWaypoint(waypoint)
-	end
-end
-
---register user waypoint
-function QuickChat:RegisterWaypoint(waypoint_data)
-	table.insert(self.active_waypoints[self.USER_ID],1,waypoint_data)
-end
-
-function QuickChat:UnregisterWaypoint(id64,index)
-	if id64 and index and self.active_waypoints[id64] and self.active_waypoints[id64][index] then 
-		return table.remove(self.active_waypoints[id64],index)
-	end
-end
-
-function QuickChat:DestroyWaypoint(waypoint_data)
-	if waypoint_data._workspace then 
-		self._gui:destroy_workspace(waypoint_data._workspace)
-		waypoint_data._workspace = nil
-	end
-	if alive(waypoint_data._panel) then 
-		
-		waypoint_data._panel:parent():remove(waypoint_data._panel)
-		waypoint_data._panel = nil
-		
-		waypoint_data._bitmap = nil
-		waypoint_data._text = nil
-	end
-	
-	if waypoint_data._light then 
-		if waypoint_data._light ~= -1 then 
-			World:delete_light(waypoint_data._light)
-		end
-		waypoint_data._light = nil
-	end
-	
-end
-
-function QuickChat:FadeoutDestroyWaypoint(waypoint_data)
-	local function fadeout_func(o)
-		local dt = coroutine.yield()
-		over(self:GetWaypointFadeoutDuration(),function(progress)
-			local n = 1 - progress
-			o:set_alpha(n * n)
-		end)
-		self:DestroyWaypoint(waypoint_data)
-	end
-	
-	if waypoint_data._panel then 
-		waypoint_data._panel:animate(fadeout_func)
-	end
-end
-
-function QuickChat:ReceiveWaypoint(peer,ping_data)
-	local id64 = peer:user_id()
-	self.active_waypoints[id64] = self.active_waypoints[id64] or {}
-	
-	if #self.active_waypoints[id64] >= self:GetMaxPingsPerPlayer() then 
-		local old_waypoint = self:RemoveWaypoint(id64,#self.active_waypoints[id64])
-		--fadeout waypoint, not instant removal
-	end
-	local waypoint_data = self:AddWaypoint(waypoint_data)
-	if waypoint_data then 
-		table.insert(self.active_waypoints[id64],1,waypoint_data)
-	end
-end
-
-function QuickChat:GetWaypointById(id64,id)
-	return self.active_waypoints[id64] and self.active_waypoints[id64][id]
-end
-
-function QuickChat:ClearAllWaypointsByPeer(id64)
-	for i=#self.active_waypoints[id64],1,-1 do 
-		local waypoint_data = table.remove(self.active_waypoints[id64],i)
-		if waypoint_data then 
-			self:DestroyWaypoint(waypoint_data)
-		end
-	end
-end
-
-function QuickChat:ClearAllWaypoints()
-	for user_id,waypoints_list in pairs(self.active_waypoints) do 
-		for i=#waypoints_list,1,-1 do 
-			local waypoint_data = table.remove(waypoints_list,i)
-			if waypoint_data then 
-				self:DestroyWaypoint(waypoint_data)
-			end
-		end
-	end
-end
-
-
-	-- Network/syncing --
-
-function QuickChat:RegisterPeer(peer,data)
-	self.registered_peers[peer:user_id()] = {
-		version_id = data.version_id
-	}
-end
-
-function QuickChat:SyncWaypointToPeers(waypoint_data)
-	local waypoint_string = self:GetWaypointString(waypoint_data)
-	if waypoint_string then 
-		local session = managers.network:session()
-		for _,peer in pairs(session:all_peers()) do 
-			local id64 = peer:user_id()
-			local peer_data = self.registered_peers[id64] 
-			local network_message = self.tweak_data.current_network_message
-			if peer_data and peer_data.version_id then 
-				if self._network_data.sync_functions_by_version[peer_data.version_id] then 
-					network_message = self._network_data.sync_functions_by_version[peer_data.version_id].add
-				end
-			end
-			LuaNetworking:SendToPeer(peer:id(),network_message,waypoint_string)
-		end
-	end
-end
-
---todo valid checking for all parameters
-function QuickChat:GetWaypointString(data)
-	local text_id = data.text_id
-	local custom_text = data.text --todo
-	local icon_type = data.icon_type
-	local icon_id = data.icon_id
-	local end_t = data.duration + Application:time()
-	local target_type = data.target_type
-	local target_id
-	if data.unit and not data.is_world then 
-		target_id = data.unit:id()
-	else
-		target_id = "nil"
-	end
-	local position = data.position and math.vector_to_string(data.position)
-	local destroy_id = data.destroy_id
-	
-	return table.concat({
-		text_id,
-		custom_text,
-		icon_type,
-		icon_id,
-		end_t,
-		target_type,
-		target_id,
-		position,
-		destroy_id
-	},"|")
-end
-
-
 --parse incoming data, return parsed data and an operation id
-function QuickChat:SyncAddWaypoint_v1(message)
+function QuickChat:OLDSyncAddWaypoint_v1(message)
 	local data = string.split(message,"|")
 	local min_arguments = 6
 	if #data < min_arguments then 
@@ -1485,7 +2430,7 @@ function QuickChat:SyncAddWaypoint_v1(message)
 	},QuickChat.tweak_data.network_operation_ids.ADD
 end
 
-function QuickChat:SyncRemoveWaypoint_v1(message)
+function QuickChat:OLDSyncRemoveWaypoint_v1(message)
 	local data = string.split(data,"|")
 	local destroy_id = data[9] and tonumber(data[9])
 	return {
@@ -1493,151 +2438,11 @@ function QuickChat:SyncRemoveWaypoint_v1(message)
 	},QuickChat.tweak_data.network_operation_ids.REMOVE
 end
 
-function QuickChat:Register_v1(message)
+function QuickChat:OLDRegister_v1(message)
 	return {
 		version_id = message
 	},QuickChat.tweak_data.network_operation_ids.REGISTER
 end
 
---on network message received:
-Hooks:Add("NetworkReceivedData", "NetworkReceivedData_QuickChat", function(sender, message_id, message)
-	local peer = managers.network:session():peer(sender)
-	if not peer or managers.chat and managers.chat:is_peer_muted(peer) then
-		--don't do anything because peer is muted
-		--blocked. unfollowed. reported.
-	else
-		if message_id and QuickChat._network_data.sync_functions_by_name[message_id] then 
-			local func_name = QuickChat._network_data.sync_functions_by_name[message_id]
-			if func_name and type(QuickChat[func_name]) == "function" then 
-				local ping_data,operation = QuickChat[func_name](QuickChat,message)
-				if not ping_data then 
-					QuickChat:log("ERROR: No valid ping_data found! Sender " .. tostring(sender) .. ", message_id " .. tostring(message_id) .. " message < " .. tostring(message) .. " >")
-					return
-				end
-				
-				if peer then 
-					if operation == QuickChat.tweak_data.network_operation_ids.REGISTER then 
-						self:RegisterPeer(peer,ping_data)
-					elseif operation == QuickChat.tweak_data.network_operation_ids.ADD then 
-					--create and register waypoint from ping_data
-						QuickChat:ReceiveWaypoint(peer,ping_data)
-					elseif operation == QuickChat.tweak_data.network_operation_ids.REMOVE then
-						QuickChat:RemoveWaypoint(peer,ping_data)
-					end
-				else
-					QuickChat:log("Failed to receive ping data from sender " .. tostring(sender) .. ":" .. tostring(message))
-				end
-			end
-		end
-	end
-end)
 
 
-	-- Menu --
-Hooks:Add("MenuManagerInitialize", "MenuManagerInitialize_QuickChat", function(menu_manager)
-	
---	QuickChat.chat_radial = RadialMouseMenu:new(QuickChat._chat_radial_data,callback(QuickChat,QuickChat,"set_chat_radial_menu")) or QuickChat.chat_radial
-	
-	MenuCallbackHandler.callback_quickchat_setting_max_pings_per_player = function(self,item) --not yet implemented
-		local value = tonumber(item:value())
-		for user_id,waypoints_list in pairs(QuickChat.active_waypoints) do 
-			if value < #QuickChat.active_waypoints then
-				for i=#waypoints_list,#waypoints_list-value,-1 do 
-					QuickChat:RemoveWaypoint(user_id,i)
-				end
-			end
-		end
-		
-	end
-	
-	MenuCallbackHandler.callback_pingwaypoint_debug = function(self,item)
-		QuickChat.settings.debug_log_enabled = item:value() == "on"
-		QuickChat:Save()
-	end
-	
-	
-	MenuCallbackHandler.callback_pingwaypoint_max_pings_per_player = function(self,item)
-		QuickChat.settings.max_pings_per_player = tonumber(item:value())
-		QuickChat:Save()
-	end
-	
-	MenuCallbackHandler.func_pingwaypoint_keybind_ping = function(self)
-		QuickChat:log("This should not be called")
-	end
-	
-	MenuCallbackHandler.callback_quickchat_mainmenu_close = function(self)
-		QuickChat:Save()
-	end
-
-	QuickChat:Load()
-	QuickChat:OnLoad()
-	--after all user waypoints are loaded, 
-	--generate the radial menu by combining the template and the selected waypoints data
-	local radial_menu_data = QuickChat.radial_menu_data
-	RadialMouseMenu:new(radial_menu_data,callback(QuickChat,QuickChat,"SetRadialMenu","ping_menu"))
-	
-	MenuHelper:LoadFromJsonFile(QuickChat._menu_path .. "options.json", QuickChat, QuickChat.settings)		
-end)
-
-
-	-- Localization (if BeardLib is installed, defers to BeardLib Localization Module) --
-Hooks:Add("LocalizationManagerPostInit", "LocalizationManagerPostInit_QuickChat", function( loc )
-	if not BeardLib then 
-		loc:load_localization_file( QuickChat._localization_path .. "english.txt")
-	end
-end)	
-
-
-	-- I/O --
-
-function QuickChat:Load()
-	self:LoadSettings()
-	self:LoadWaypoints()
-end
-
-function QuickChat:Save()
-	self:SaveSettings()
-	self:SaveWaypoints()
-end
-
-function QuickChat:LoadWaypoints()
-	local file = io.open(self._waypoints_save_path, "r")
-	if (file) then
-		for k, v in pairs(json.decode(file:read("*all"))) do
-			self.user_waypoints[k] = v
-		end
-	else
-		self:SaveWaypoints()
-	end
-	return self.user_waypoints
-end
-
-function QuickChat:SaveWaypoints()
-	local file = io.open(self._waypoints_save_path,"w+")
-	if file then
-		file:write(json.encode(self.user_waypoints))
-		file:flush()
-		file:close()
-	end
-end
-
-function QuickChat:LoadSettings()
-	local file = io.open(self._save_path, "r")
-	if (file) then
-		for k, v in pairs(json.decode(file:read("*all"))) do
-			self.settings[k] = v
-		end
-	else
-		self:SaveSettings()
-	end
-	return self.settings
-end
-
-function QuickChat:SaveSettings()
-	local file = io.open(self._save_path,"w+")
-	if file then
-		file:write(json.encode(self.settings))
-		file:flush()
-		file:close()
-	end
-end
