@@ -4,6 +4,7 @@
 
 	
 todo:
+	- highlight selected waypoint
 	show distance option
 	-custom table.concat implementation to allow empty strings of length zero
 	--remove waypoints by vector dot within x deg
@@ -18,6 +19,7 @@ todo:
 		- eg. killing a unit removes the waypoint automatically if the waypoint is a character waypoint
 		- are waypoints truly and completely client-authoritative?
 	-implement timer
+	- fix slotmask raycasts to allow pinging keycards, etc.
 	-resolve wall-ping behavior
 		glowing circle for positional markers (spotlight + circle graphic aligned against normal dir; repurpose waypoint)
 	hide waypoints when not in game
@@ -27,7 +29,7 @@ todo:
 	-optional "[You] pinged [object]" message in local chat
 	-voice command cooldown
 lower priority todo: 
-	allow contextual "responding" when pinging others' waypoints; eg. pinging a keycard that someone else has pinged will say "dibs"
+	allow contextual "responding" when pinging others' waypoints; eg. pinging a keycard that someone else has pinged will say "dibs"; appears in chat or feed
 	prevent ADS when exiting radial menu with rightclick
 	--separate table to handle fade-remove waypoints
 	--radial menu
@@ -109,23 +111,6 @@ schema:
 	10. [Boolean] is_character: Represents whether or not the given unit is a character with the valid damage extension character_damage(). (Enemy, civilian, joker/hired help, teammate ai, player)
 	11. [Boolean] is_world: Represents whether this waypoint is a "static" world waypoint. In this case, the waypoint will not update its position for any of its indicators (panel, workspace, spotlight)
 	12. [Boolean] is_dead: Represents whether the given unit is dead, which will consequently require a different set of search parameters to find the unit by the given uid.
-	
-	
-	1 Integer [whitelisted text message id]
-	2 String [custom text (optional)]
-	3 Integer [icon source type]
-	4 String [icon id]
-	5 Integer [duration] (rounded up)
-	6 Integer [target type]
-	7 Integer [target id]
-	8 String [encoded position vector3]
---	9 String [encoded normal vector3]?
-	9 Integer [owner-authoritative waypoint id for remote destroy]
-	
-	
-	
-	
-	
 	
 	
 	local viewport_cam = managers.viewport:get_current_camera()
@@ -1492,6 +1477,12 @@ function QuickChat:CreatePing(ping_type)
 				interaction_tweak_id = interaction_ext.tweak_data
 			end
 		end
+	
+		if unit:in_slot(managers.slot._masks.pickups) then
+			self:log("Pinged a pickup")
+		elseif unit:in_slot(managers.slot._masks.enemies) then
+			self:log("Pinged an enemy")
+		end
 	end
 	
 	if self._selected_ping then 
@@ -1527,7 +1518,6 @@ function QuickChat:CreatePing(ping_type)
 			--other case-specific bases
 		end
 	end
-	
 	
 	icon_id = icon_id or params.icon_id
 	icon_type = icon_type or params.icon_type
