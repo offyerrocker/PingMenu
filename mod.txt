@@ -1,0 +1,16 @@
+{
+	"name" : "QuickChat",
+	"description" : "Use a radial menu like Left 4 Dead to quickly send chat messages.",
+	"author" : "Offyerrocker",
+	"contact" : "Discord: Offyerrocker#3878",
+	"version" : "2.0.0",
+	"blt_version" : 2,
+	"priority" : 1,
+	"color" : "255 255 255",
+	"hooks" : [
+		{
+			"hook_id" : "lib/managers/menumanager",
+			"script_path" : "menumanager.lua"
+		}
+	]
+}

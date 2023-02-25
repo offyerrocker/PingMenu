@@ -1,2 +1,3 @@
 # PD2-QuickChat
-Ping Menu for PAYDAY 2. Requires RadialMouseMenu.
+QuickChat radial mod for PAYDAY 2, to quickly send premade messages.
+Compatible with controllers.

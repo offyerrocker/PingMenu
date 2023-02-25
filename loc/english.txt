@@ -1,0 +1,4 @@
+{
+	"qc_ptm_meds_1" : "I need a Medic Bag!",
+	"qc_ptm_meds_2" : "I need a First Aid Kit!"
+}
