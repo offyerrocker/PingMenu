@@ -3,14 +3,21 @@
 	"description" : "Use a radial menu like Left 4 Dead to quickly send chat messages.",
 	"author" : "Offyerrocker",
 	"contact" : "Discord: Offyerrocker#3878",
-	"version" : "2.0.0",
+	"version" : "0.0.1",
 	"blt_version" : 2,
-	"priority" : 1,
 	"color" : "255 255 255",
 	"hooks" : [
 		{
 			"hook_id" : "lib/managers/menumanager",
-			"script_path" : "menumanager.lua"
+			"script_path" : "hooks/menumanager.lua"
+		},
+		{
+			"hook_id" : "lib/network/clientnetworksession",
+			"script_path" : "hooks/clientnetworksession.lua"
+		},
+		{
+			"hook_id" : "lib/network/hostnetworksession",
+			"script_path" : "hooks/hostnetworksession.lua"
 		}
 	]
 }

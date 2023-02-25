@@ -1,0 +1,20 @@
+{
+	"qc_ptm_yes" : "Yes",
+	"qc_ptm_no" : "No",
+	"qc_ptm_greeting" : "Hello!",
+	"qc_ptm_thanks" : "Thanks!",
+	"qc_ptm_apology" : "Sorry...",
+	"qc_ptm_help" : "Help!",
+	"qc_ptm_follow" : "Follow me!",
+	"qc_ptm_attack" : "Attack!",
+	"qc_ptm_defend" : "Defend the objective!",
+	"qc_ptm_need_docbag" : "I need a Medic Bag!",
+	"qc_ptm_need_fak" : "I need a First Aid Kit!",
+	"qc_ptm_need_ammo" : "I need an Ammo Bag!",
+	"qc_ptm_need_ecm" : "Place an ECM!",
+	"qc_ptm_need_sentrygun" : "Place a Sentry Gun here!",
+	"qc_ptm_need_tripmine" : "Place a Trip Mine here!",
+	"qc_ptm_need_shapedcharge" : "Place a Shaped Charge here!",
+	"qc_ptm_need_grenades" : "Place a Grenade Crate here!",
+	"qc_ptm_need_convert" : "I need a convert!"
+}

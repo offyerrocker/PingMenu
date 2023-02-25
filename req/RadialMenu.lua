@@ -1,3 +1,5 @@
+--v2.0.0
+
 --[[
 	TODO
 straighten highlight/selected/active item terminology
@@ -134,7 +136,9 @@ function RadialMenuObject:setup(params) --create new instance of a radial select
 		animate_focus_grow_size = params.animate_focus_grow_size or 1.66,
 		animate_focus_duration = params.animate_focus_duration or 0.33,
 		animate_unfocus_duration = params.animate_unfocus_duration or 0.33,
+		mouseover_text_visible = params.mouseover_text_visible and true or false,
 		item_text_visible = params.item_text_visible and true or false,
+		reset_mouse_position_on_show = params.reset_mouse_position_on_show and true or false,
 		title = "",
 		text = ""
 	})
@@ -196,28 +200,18 @@ function RadialMenuDialog:init(manager,data,...)
 	
 	self._manager = manager --RadialMenuMananger
 	self._ws = manager._ws
-	self._data = data
-
+	
+	self._parent = data.parent --parent RadialMenuObject (cannot be changed afterward)
 	self._items = {} --populated later
-	if data.controller_mode_enabled ~= nil then 
-		self._controller_mode_enabled = data.controller_mode_enabled --if true, checks the axis movement and selects the item by that angle
-	else
-		local wrapper_type = _G.managers.controller:get_default_wrapper_type()
-		self._controller_mode_enabled = wrapper_type ~= "pc"
-	end
-	self._parent = data.parent --parent RadialMenuObject
-	self._class_panel = data.class_panel
 	self._panel = nil --populated later
 	self._mouse_id = nil
 	self.is_active = false --determines whether this dialog is active and stops gameplay input
 	self._input_enabled = false --determines whether this dialog can take input
 	
-	self._controller = data.controller or manager:_get_controller()
 	self._confirm_func = callback(self, self, "button_pressed_callback") --automatic menu input for this is unreliable
 	self._cancel_func = callback(self, self, "dialog_cancel_callback")
-
-	self:recreate_gui()
---	self:populate_items()
+	
+	self:config(data)
 	
 	self._selected_index = nil
 end
@@ -228,7 +222,18 @@ function RadialMenuDialog:log(s)
 end
 
 function RadialMenuDialog:config(data)
---	self:recreate_gui()
+	self._data = data
+	
+	if data.controller_mode_enabled ~= nil then 
+		self._controller_mode_enabled = data.controller_mode_enabled --if true, checks the axis movement and selects the item by that angle
+	else
+		local wrapper_type = _G.managers.controller:get_default_wrapper_type()
+		self._controller_mode_enabled = wrapper_type ~= "pc"
+	end
+	
+	self._class_panel = data.class_panel or self._class_panel
+	self._controller = data.controller or self._manager:_get_controller() or self._controller
+	self:recreate_gui()
 end
 
 function RadialMenuDialog:recreate_gui()
@@ -261,9 +266,9 @@ function RadialMenuDialog:recreate_gui()
 			--active_highlight --toggle-visible for active items. arc segment
 			--icon --the image primarily representing this button
 			
-	local HIGHLIGHT_TEXTURE = data.texture_highlight
-	local DARKLIGHT_TEXTURE = data.texture_darklight
-	local CURSOR_TEXTURE = data.texture_cursor
+	local HIGHLIGHT_TEXTURE = data.texture_highlight or "guis/dlcs/coco/textures/pd2/hud_absorb_stack_fg"
+	local DARKLIGHT_TEXTURE = data.texture_darklight or "guis/textures/pd2/hud_radialbg"
+	local CURSOR_TEXTURE = data.texture_cursor or "guis/textures/pd2/hud_shield"
 	local radius = data.size
 	local icon_distance = radius / 3
 	local label_distance = radius / 4
@@ -298,20 +303,21 @@ function RadialMenuDialog:recreate_gui()
 	
 	local mouseover_label = panel:text({
 		name = "mouseover_label",
-		text = "asdkjfhaks",
+		text = "",
 		font = data.font or "fonts/font_medium_shadow_mf",
 		font_size = data.font_size or 24,
 		align = "center",
 		vertical = "center",
 		valign = "grow", --halign/valign don't apply to text object font size, only clipping box
 		halign = "grow",
-		layer = 6
+		layer = 6,
+		visible = data.mouseover_text_visible
 	})
 	
 	local MARGIN_PERCENT = data.item_margin --10% of a slice's theta angle is cut off to create a margin
 	for i,item in ipairs(data.items) do 
-		local icon_w = item.w
-		local icon_h = item.h
+		local icon_w = item.w or 32
+		local icon_h = item.h or 32
 		local i_prog = (i - 1) / num_items
 		local arc_length = (1 / num_items) * (1 - MARGIN_PERCENT)
 		local arc_offset = MARGIN_PERCENT / (num_items * 2)
@@ -661,6 +667,9 @@ end
 function RadialMenuDialog:show()
 	self._manager:event_dialog_shown(self)
 	self._panel:show()
+	if self._data.reset_mouse_position_on_show then
+		_G.managers.mouse_pointer:set_mouse_world_position(self._panel:world_center())
+	end
 	self.is_active = true
 	return true
 end	
@@ -670,6 +679,7 @@ function RadialMenuDialog:hide(select_current)
 		local index = self:get_selected_index()
 		if index then
 			self:_callback_item_confirmed(index,self._items[index])
+			self:on_mouseover_item(nil,index)
 		end
 		self:clear_selected_index()
 		self:set_mouseover_text("")
