@@ -1,6 +1,8 @@
 --todo: in networksession hooks, send only to synced player?
 --input check in update should save a flag for is_controller, and check Input:mouse() for pc input
 --default data
+--sometimes virtualcontroller input checking just breaks for no reason!
+--make saves/QuickChat/layout/ directory
 
 QuickChat = QuickChat or {
 	_radial_menu_manager = nil, --for reference
@@ -9,6 +11,7 @@ QuickChat = QuickChat or {
 QuickChat._core = QuickChatCore
 QuickChat._mod_path = (QuickChatCore and QuickChatCore.GetPath and QuickChatCore:GetPath()) or ModPath
 QuickChat._save_path = SavePath .. "QuickChat/"
+QuickChat._settings_name = "settings.json"
 QuickChat.settings = {
 	pc = {
 		j = "callouts_1"
@@ -17,6 +20,8 @@ QuickChat.settings = {
 		left = "callouts_1"
 	}
 } --general user pref
+QuickChat.sort_settings = {}
+
 QuickChat.SYNC_MESSAGE_PRESET = "QuickChat_message_preset"
 QuickChat.SYNC_MESSAGE_REGISTER = "QuickChat_Register"
 QuickChat.API_VERSION = "1" -- string!
@@ -280,10 +285,12 @@ function QuickChat:CreateMenus()
 end
 
 function QuickChat:Update(t,dt)
+	local player_unit,player_alive
 	if self._gamepad_mode_enabled then 
-		local player = managers.player:local_player()
-		if alive(player) then 
-			local state = player:movement():current_state()
+		player_unit = managers.player and managers.player:local_player()
+		player_alive = player_unit and alive(player_unit)
+		if player_alive then 
+			local state = player_unit:movement():current_state()
 			local _controller = state._controller or managers.system_menu:_get_controller()
 			local ci = _controller._id
 			controller = Input:controller(ci)
@@ -313,6 +320,15 @@ function QuickChat:Update(t,dt)
 			else
 				if input_data.state then
 --					_G.Console:SetTracker(string.format("hide %.1f",t),4)
+					if self._gamepad_mode_enabled and player_alive then 
+						local camera = player_unit:camera()
+						local fpcamera_unit = camera and camera._camera_unit
+						local fpcamera_base = fpcamera_unit and fpcamera_unit:base()
+						if fpcamera_base then
+							fpcamera_base._last_rot_t = nil
+						end
+						
+					end
 					menu:Hide(true)
 				end
 			end
@@ -412,6 +428,23 @@ function QuickChat:SendSyncPeerVersionToAll()
 	LuaNetworking:SendToPeers(self.SYNC_MESSAGE_REGISTER,self.API_VERSION)
 end
 
+function QuickChat:LoadSettings()
+	if self._lip then 
+		--[[
+		local save_file_name = self._save_path .. self._settings_name
+		if file.FileExists(save_file_name) then
+			local save_data = self._lip.load(save_file_name)
+			local settings_data = save_data.Settings
+			local bindings_data = save_data.Bindings
+		end
+		--]]
+	end
+end
+
+function QuickChat:SaveSettings()
+	
+end
+
 do --load RadialMenu
 	local f,e = blt.vm.loadfile(QuickChat._mod_path .. "req/RadialMenu.lua")
 	if f then 
@@ -433,65 +466,6 @@ do --load Lua ini Parser
 	end
 end
 
-if false then --populate default radials
-	QuickChat._radial_menu_params.callouts_1 = {
-		id = "callouts_1",
-	--	title = "",
-	--	desc = "",
-	--	localized = true,
-		size = 256,
-		deadzone = 0,
-		texture_highlight = "guis/textures/radial_menu/highlight",
-		texture_darklight = "guis/textures/radial_menu/darklight",	
-		texture_cursor = "guis/textures/radial_menu/cursor",
-		focus_alpha = 1,
-		unfocus_alpha = 0.5,
-		item_margin = 0.2,
-		items = {
-			{
-				icon = "equipment_doctor_bag",
-				preset_text = "need_docbag",
-				preset_callback = "chat"
-			},
-			{
-				icon = "equipment_first_aid_kit",
-				preset_text = "need_fak",
-				preset_callback = "chat"
-			},
-			{
-				icon = "equipment_ammo_bag",
-				preset_text = "need_ammo",
-				preset_callback = "chat"
-			},
-			{
-				icon = "equipment_ecm_jammer",
-				preset_text = "need_ecm",
-				preset_callback = "chat"
-			},
-			{
-				icon = "equipment_sentry",
-				preset_text = "need_sentrygun",
-				preset_callback = "chat"
-			},
-			{
-				icon = "equipment_trip_mine",
-				preset_text = "need_tripmine",
-				preset_callback = "chat"
-			},
-			{
-				icon = "pd2_c4",
-				preset_text = "need_shapedcharge",
-				preset_callback = "chat"
-			},
-			{
-				icon = "frag_grenade",
-				preset_text = "need_grenades",
-				preset_callback = "chat"
-			}
-		}
-	}
-end
-
 Hooks:Add("MenuManagerSetupCustomMenus","QuickChat_MenuManagerSetupCustomMenus",function(menu_manager, nodes)
 	
 end)
@@ -502,6 +476,8 @@ Hooks:Add("MenuManagerBuildCustomMenus","QuickChat_MenuManagerBuildCustomMenus",
 	
 end)
 Hooks:Add("MenuManagerInitialize","QuickChat_MenuManagerInitialize",function(menu_manager)
+	QuickChat:LoadSettings()
+	
 	QuickChat:LoadCustomRadials()
 	QuickChat:CreateMenus()
 end)
