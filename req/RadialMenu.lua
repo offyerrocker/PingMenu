@@ -339,6 +339,7 @@ function RadialMenuDialog:recreate_gui()
 			color = item.color,
 			halign = "grow",
 			valign = "grow",
+			alpha = data.unfocus_alpha or 0.5,
 			layer = 4
 --,			visible = i == 1
 		})

@@ -1,4 +1,6 @@
 --todo: in networksession hooks, send only to synced player?
+--input check in update should save a flag for is_controller, and check Input:mouse() for pc input
+--default data
 
 QuickChat = QuickChat or {
 	_radial_menu_manager = nil, --for reference
@@ -8,7 +10,12 @@ QuickChat._core = QuickChatCore
 QuickChat._mod_path = (QuickChatCore and QuickChatCore.GetPath and QuickChatCore:GetPath()) or ModPath
 QuickChat._save_path = SavePath .. "QuickChat/"
 QuickChat.settings = {
-	
+	pc = {
+		j = "callouts_1"
+	},
+	controller_generic = {
+		left = "callouts_1"
+	}
 } --general user pref
 QuickChat.SYNC_MESSAGE_PRESET = "QuickChat_message_preset"
 QuickChat.SYNC_MESSAGE_REGISTER = "QuickChat_Register"
@@ -40,7 +47,7 @@ QuickChat._preset_callbacks = {
 			if item_data.preset_text then 
 				QuickChat:SendPresetMessage(item_data.preset_text)
 			elseif item_data.text then
-				QuickChat:SendChat(item_data.text)
+				QuickChat:SendChatToAll(item_data.text)
 			end
 		end
 	end
@@ -50,18 +57,31 @@ QuickChat._radial_menu_params = {} --ungenerated radial menus; populated with us
 
 QuickChat.input_cache = {}
 QuickChat.bindings = {
+	mousekeyboard = {
+		["j"] = "callouts_1",
+		["k"] = "deployables_1",
+		["l"] = "custom_1"
+	},
+	virtualcontroller = {
+		["left"] = "callouts_1",
+		["right"] = "deployables_1",
+		["push_to_talk"] = "custom_1"
+	}
+	--[[
 	pc = {
 		["j"] = "callouts_1"
 	},
-	ps3 = {},
+	--platform specific bindings
+	,ps3 = {},
 	ps4 = {},
 	xb1 = {},
 	xbox360 = {
-		["left"] = 1
+		["left"] = "callouts_1"
 	},
 	gamepad = {},
 	vr = {},
 	steam = {}
+	--]]
 }
 
 function QuickChat:LoadCustomRadials()
@@ -89,6 +109,23 @@ function QuickChat:LoadCustomRadials()
 			end
 		end
 		
+		--load default layouts (built-in) first
+		local layout_path = self._mod_path .. "layouts/"
+		local files = get_files(layout_path)
+		for _,filename in pairs(files) do 
+			local ext = string.sub(filename,-4)
+			if ext == ".ini" then
+				--check if get_files is alphabetized
+				local ini_data = self._lip.load(layout_path .. filename)
+				local radial_id,new_radial_data = self:LoadMenuFromIni(ini_data)
+				if new_radial_data then
+					radial_id = radial_id or string.sub(filename,1,-5)
+					self._radial_menu_params[radial_id] = new_radial_data
+				end
+			end
+		end
+		
+		--load custom layouts last so that they can overwrite existing defaults
 		local save_path = self._save_path
 		if not directory_exists(save_path) then 
 			make_dir(save_path)
@@ -96,12 +133,13 @@ function QuickChat:LoadCustomRadials()
 		if directory_exists(save_path) then
 			local files = get_files(save_path)
 			for _,filename in pairs(files) do 
-				local ext = string.sub(filename,-3)
-				if ext == "ini" then
+				local ext = string.sub(filename,-4)
+				if ext == ".ini" then
 					--check if get_files is alphabetized
 					local ini_data = self._lip.load(save_path .. filename)
 					local radial_id,new_radial_data = self:LoadMenuFromIni(ini_data)
-					if radial_id and new_radial_data then
+					if new_radial_data then
+						radial_id = radial_id or string.sub(filename,1,-5)
 						self._radial_menu_params[radial_id] = new_radial_data
 					end
 				end
@@ -109,6 +147,7 @@ function QuickChat:LoadCustomRadials()
 		else
 			--unable to make dir
 		end
+		
 	end
 end
 
@@ -218,8 +257,14 @@ function QuickChat:CreateMenus()
 	local wrapper_type = managers.controller:get_default_wrapper_type()
 	self._gamepad_mode_enabled = wrapper_type ~= "pc"
 	
+	local control_type
+	if self._gamepad_mode_enabled then 
+		control_type = "virtualcontroller"
+	else
+		control_type = "mousekeyboard"
+	end
 	--only create menu objects for radial menus that are bound to at least one key
-	local binding_data = self.bindings[wrapper_type]
+	local binding_data = self.bindings[control_type]
 	if binding_data then
 		for button_name,radial_id in pairs(binding_data) do
 			local button_name_ids = Idstring(button_name)
@@ -231,45 +276,10 @@ function QuickChat:CreateMenus()
 			end
 		end
 	end
-	--[[
-	for i=1,14,1 do 
-		local controller = Input:controller(i)
-		if controller.type_name and controller.type_name ~= "VirtualController" then
-			self._controller = controller
-		end
-	end
-	if self._controller then
-		self._controller:add_trigger("left_shoulder",function() _G.Console:Log("Hello") end)
-		BeardLib:AddUpdater("quickchat_update_keyboard_input",callback(self,self,"Update"))
-	end
-	--]]
-	
-	--[[
-	local controller
-	local player = managers.player:local_player()
-	if alive(player) then 
-		local state = player:movement():current_state()
-		controller = state._controller
-	end
-	controller = controller or managers.system_menu:_get_controller()
-	controller:add_trigger("confirm",function() Log("confirm") end)
-	controller:add_trigger("d_left",function() Log("d left") end)
-	controller:add_trigger("left_shoulder",function() Log("left shoulder") end)
-	--]]
 	BeardLib:AddUpdater("quickchat_update_keyboard_input",callback(self,self,"Update"))
 end
 
 function QuickChat:Update(t,dt)
-	--[[
-	local i = 0
-	for buttonname,inputname in pairs(buttons) do 
-		i = i + 1
-		Console:SetTracker(string.format("%s %s",buttonname,tostring(controller:down(Idstring(buttonname)))),i)
-	end
-	
-	do return end
-	--]]
-	
 	if self._gamepad_mode_enabled then 
 		local player = managers.player:local_player()
 		if alive(player) then 
@@ -284,18 +294,25 @@ function QuickChat:Update(t,dt)
 	
 	if not controller then return end
 	
+	
 	for button_name_ids,input_data in pairs(self.input_cache) do 
+		
 		local menu = self:GetMenu(input_data.id)
 		local state = controller:down(button_name_ids)
+--		_G.Console:SetTracker(string.format("Key down %s,%.1f,",state,t),1)
 		if menu then
 			if state then 
-				if not input_data.state then 
-	--				OffyLib:c_log("Show")
-					menu:Show()
+				if not input_data.state then --and not any_open
+--					_G.Console:SetTracker("is active? " .. tostring(self._last_menu and self._last_menu:IsActive()),2)
+					if not (self._last_menu and self._last_menu:IsActive()) then
+--						_G.Console:SetTracker(string.format("show %.1f",t),3)
+						menu:Show()
+						self._last_menu = menu
+					end
 				end
 			else
 				if input_data.state then
-	--				OffyLib:c_log("Hide")
+--					_G.Console:SetTracker(string.format("hide %.1f",t),4)
 					menu:Hide(true)
 				end
 			end
@@ -350,7 +367,7 @@ function QuickChat:SendPresetMessage(preset_text)
 						LuaNetworking:SendToPeer(peer:id(),self.SYNC_MESSAGE_PRESET,preset_text)
 					else
 						if peer:ip_verified() then
-							peer:send("send_chat_message", LuaNetworking.HiddenChannel, text_localized)
+							peer:send("send_chat_message", ChatManager.GAME, text_localized) --LuaNetworking.HiddenChannel
 						end
 					end
 				end
@@ -386,7 +403,7 @@ function QuickChat:SendChatToAll(msg)
 		local peer_id = session:local_peer():id()
 		local col = tweak_data.chat_colors[peer_id]
 		local username = managers.network.account:username()
-		managers.chat:_receive_message(ChatManager.GAME,username,msg,col)
+--		managers.chat:_receive_message(ChatManager.GAME,username,msg,col)
 		managers.chat:send_message(ChatManager.GAME,username,msg)
 	end
 end
