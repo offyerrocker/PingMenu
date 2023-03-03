@@ -354,6 +354,7 @@ end
 
 function QuickChat:Setup()
 	self:CreateMenus()
+	self:AddUpdater("QuickChat_UpdateInGame",callback(self,self,"UpdateGame"))
 end
 
 function QuickChat:CreateMenus()
@@ -373,6 +374,16 @@ function QuickChat:CreateMenus()
 				end
 			end
 		end
+	end
+end
+
+function QuickChat:ClearInputCache()
+	for button_name_ids,input_data in pairs(self._input_cache) do 
+		local menu = self:GetMenu(input_data.id)
+		if menu then 
+			menu:Hide(false) --do not activate "confirm" callback
+		end
+		self._input_cache[button_name_ids] = nil
 	end
 end
 
@@ -398,13 +409,17 @@ function QuickChat:GetController()
 	return controller
 end
 
-function QuickChat:Update(t,dt)
+function QuickChat:Update(source,t,dt)
+	local game_is_paused = source == "GameSetupPausedUpdate"
+	--todo split into separate updater table for efficiency
 	for id,data in pairs(self._updaters) do 
-		if not data.paused then
-			data.func(t,dt)
+		if not game_is_paused or data.pause_enabled then
+			data.func(t,dt,game_is_paused)
 		end
 	end
+end
 
+function QuickChat:UpdateGame(t,dt)
 	local controller = self:GetController()
 	if not controller then
 		return
@@ -428,7 +443,6 @@ function QuickChat:Update(t,dt)
 				if input_data.state then
 --					_G.Console:SetTracker(string.format("hide %.1f",t),4)
 					if self:IsGamepadModeEnabled() then 
-						
 						local player_unit = managers.player:local_player()
 						if alive(player_unit) then
 							local camera = player_unit:camera()
@@ -447,7 +461,6 @@ function QuickChat:Update(t,dt)
 		
 		input_data.state = state
 	end
-
 end
 
 function QuickChat:GetMenu(id)
@@ -540,20 +553,20 @@ function QuickChat:SendSyncPeerVersionToAll()
 end
 
 function QuickChat:AddControllerInputListener()
-	self:AddUpdater("quickchat_update_rebinding",callback(self,self,"UpdateRebindingListener"))
+	self:AddUpdater("quickchat_update_rebinding",callback(self,self,"UpdateRebindingListener"),true)
 end
 
 function QuickChat:RemoveControllerInputListener()
 	self:RemoveUpdater("quickchat_update_rebinding")
 end
 
-function QuickChat:AddUpdater(id,func,start_paused)
+function QuickChat:AddUpdater(id,func,run_while_paused)
 	local f_type = type(func)
 	if f_type == "function" then
 		self._updaters[id] = {
 			id = id,
 			func = func,
-			paused = start_paused
+			pause_enabled = run_while_paused
 		}
 	else
 		self:Log("ERROR: Bad updater type for " .. tostring(id) .. ": " .. f_type .. " (expected function)")
@@ -778,19 +791,29 @@ Hooks:Add("MenuManagerPopulateCustomMenus","QuickChat_MenuManagerPopulateCustomM
 			else
 				title = "qc_menu_bind_prompt_keyboard_title"
 				desc = "qc_menu_bind_prompt_keyboard_desc"
-				button_unbind_name = "esc"
-				button_cancel_name = "backspace"
+				button_unbind_name = "backspace"
+				button_cancel_name = "esc"
 			end
 			QuickChat._quickmenu_item = QuickMenu:new(
 				managers.localization:text(title),
-				managers.localization:text(desc,{BTN_UNBIND=button_unbind_name,BTN_CANCEL=button_cancel_name}),
+				managers.localization:text(desc,{BTN_UNBIND=utf8.to_upper(button_unbind_name),BTN_CANCEL=utf8.to_upper(button_cancel_name)}),
 				{
 					{
+						text = managers.localization:text("qc_menu_bind_prompt_unbind"),
+						callback = function()
+							if QuickChat._callback_bind_button then
+								QuickChat:_callback_bind_button(button_unbind_name)
+							end
+							QuickChat:RemoveControllerInputListener()
+						end
+					},
+					{
 						text = managers.localization:text("qc_menu_dialog_cancel"),
+						is_default_button = true,
+						is_cancel_button = true,
 						callback = function()
 							QuickChat:RemoveControllerInputListener()
-						end,
-						is_cancel_button = true
+						end
 					}
 				},
 				true
@@ -804,18 +827,21 @@ Hooks:Add("MenuManagerPopulateCustomMenus","QuickChat_MenuManagerPopulateCustomM
 				end
 				if button_name == button_unbind_name then 
 					--unbind and close
-					self._bindings[radial_id] = nil
-					QuickMenu:new(
-						managers.localization:text("qc_menu_bind_prompt_unbound_title"),
-						managers.localization:text("qc_menu_bind_prompt_unbound_title",{KEYNAME=utf8.to_upper(button_name),RADIAL=radial_id}),
-						{
+					local _button_name = self._bindings[radial_id]
+					if _button_name then
+						QuickMenu:new(
+							managers.localization:text("qc_menu_bind_prompt_unbound_title"),
+							managers.localization:text("qc_menu_bind_prompt_unbound_desc",{KEYNAME=utf8.to_upper(_button_name),RADIAL=radial_id}),
 							{
-								text = managers.localization:text("qc_menu_dialog_accept"),
-								is_cancel_button = true
-							}
-						},
-						true
-					)
+								{
+									text = managers.localization:text("qc_menu_dialog_accept"),
+									is_cancel_button = true
+								}
+							},
+							true
+						)
+					end
+					self._bindings[radial_id] = nil
 					refresh_menu_item(quickchat_main_menu_id,item_priority,unbound_text)
 					return
 				elseif button_name == button_cancel_name then
@@ -853,6 +879,7 @@ Hooks:Add("MenuManagerPopulateCustomMenus","QuickChat_MenuManagerPopulateCustomM
 						},
 						true
 					)
+					self:ClearInputCache()
 					self:CreateMenus()
 					refresh_menu_item(quickchat_main_menu_id,item_priority,managers.localization:text("qc_bind_status_title",{KEYNAME=utf8.to_upper(button_name)}))
 				end
@@ -938,8 +965,9 @@ end)
 
 Hooks:Add("BaseNetworkSessionOnLoadComplete","QuickChat_OnLoaded",callback(QuickChat,QuickChat,"Setup"))
 
---Hooks:Add("GameSetupUpdate","QuickChat_GameUpdate",callback(QuickChat,QuickChat,"Update"))
-Hooks:Add("MenuUpdate","QuickChat_MenuUpdate",callback(QuickChat,QuickChat,"Update"))
+Hooks:Add("GameSetupUpdate","QuickChat_GameUpdate",callback(QuickChat,QuickChat,"Update","GameSetupUpdate"))
+Hooks:Add("GameSetupPausedUpdate","QuickChat_GamePausedUpdate",callback(QuickChat,QuickChat,"Update","GameSetupPausedUpdate"))
+Hooks:Add("MenuUpdate","QuickChat_MenuUpdate",callback(QuickChat,QuickChat,"Update","MenuUpdate"))
 
 
 --[[

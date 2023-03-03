@@ -31,6 +31,7 @@
 	"qc_menu_main_desc" : "Edit QuickChat Settings",
 	
 	"qc_menu_dialog_accept" : "Okay",
+	"qc_menu_bind_prompt_unbind" : "Unbind",
 	"qc_menu_dialog_cancel" : "Cancel",
 	"qc_menu_bind_prompt_unbound_title" : "Button unbound",
 	"qc_menu_bind_prompt_unbound_desc" : "Unbound [$KEYNAME] from [$RADIAL].",
