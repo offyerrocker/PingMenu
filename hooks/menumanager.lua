@@ -11,9 +11,9 @@
 	--validate existing menus
 	--ensure that previous buttons are unbound
 --internal binding conflict detection 
---update binding preview in menu
+--preview radial in menu
 --button combos?
-
+--localize menu button names for controllers, per gamepad type
 
 QuickChat = QuickChat or {
 	_radial_menu_manager = nil, --for reference
@@ -31,17 +31,10 @@ QuickChat.settings = {} --general user pref (unused)
 QuickChat.sort_settings = {}
 QuickChat._bindings = {
 --[[
-	keyboard = {
-		["j"] = "callouts_1",
-		["k"] = "deployables_1",
-		["l"] = "custom_1"
-	},
-	virtualcontroller = {
-		["left"] = "callouts_1",
-		["right"] = "deployables_1",
-		["push_to_talk"] = "custom_1"
-	}
-	--]]
+	callouts_1 = "j",
+	deployables_1 = "k",
+	custom_1 = "l"
+--]]
 }
 QuickChat.SYNC_MESSAGE_PRESET = "QuickChat_message_preset"
 QuickChat.SYNC_MESSAGE_REGISTER = "QuickChat_Register"
@@ -81,6 +74,9 @@ QuickChat._preset_callbacks = {
 QuickChat._radial_menus = {} --generated radial menus
 QuickChat._radial_menu_params = {} --ungenerated radial menus; populated with user data
 
+QuickChat._callback_bind_button = nil
+QuickChat._updaters = {}
+	
 QuickChat._input_cache = {}
 
 QuickChat.allowed_binding_buttons = { --wrapper-specific bindings
@@ -358,22 +354,31 @@ end
 
 function QuickChat:Setup()
 	self:CreateMenus()
-	BeardLib:AddUpdater("quickchat_update_keyboard_input",callback(self,self,"Update"))
 end
 
 function QuickChat:CreateMenus()
 	--only create menu objects for radial menus that are bound to at least one key
 	local binding_data = self._bindings
 	if binding_data then
-		for button_name,radial_id in pairs(binding_data) do
+		for radial_id,button_name in pairs(binding_data) do
 			local button_name_ids = Idstring(button_name)
 			self._input_cache[button_name_ids] = {id = radial_id,state = false,button_name = button_name}
 			if not self._radial_menus[radial_id] then
 				local radial_menu_params = self._radial_menu_params[radial_id]
-				local new_menu = self._radial_menu_manager:NewMenu(radial_menu_params)
-				self._radial_menus[radial_id] = new_menu
+				if radial_menu_params then
+					local new_menu = self._radial_menu_manager:NewMenu(radial_menu_params)
+					self._radial_menus[radial_id] = new_menu
+				else
+					self:Log("Error creating menu: " .. tostring(radial_id))
+				end
 			end
 		end
+	end
+end
+
+function QuickChat:Log(msg)
+	if Console then
+		Console:Log(msg)
 	end
 end
 
@@ -394,6 +399,12 @@ function QuickChat:GetController()
 end
 
 function QuickChat:Update(t,dt)
+	for id,data in pairs(self._updaters) do 
+		if not data.paused then
+			data.func(t,dt)
+		end
+	end
+
 	local controller = self:GetController()
 	if not controller then
 		return
@@ -529,11 +540,28 @@ function QuickChat:SendSyncPeerVersionToAll()
 end
 
 function QuickChat:AddControllerInputListener()
-	BeardLib:AddUpdater("quickchat_update_rebinding",callback(self,self,"UpdateRebindingListener"))
+	self:AddUpdater("quickchat_update_rebinding",callback(self,self,"UpdateRebindingListener"))
 end
 
 function QuickChat:RemoveControllerInputListener()
-	BeardLib:RemoveUpdater("quickchat_update_rebinding")
+	self:RemoveUpdater("quickchat_update_rebinding")
+end
+
+function QuickChat:AddUpdater(id,func,start_paused)
+	local f_type = type(func)
+	if f_type == "function" then
+		self._updaters[id] = {
+			id = id,
+			func = func,
+			paused = start_paused
+		}
+	else
+		self:Log("ERROR: Bad updater type for " .. tostring(id) .. ": " .. f_type .. " (expected function)")
+	end
+end
+
+function QuickChat:RemoveUpdater(id)
+	self._updaters[id] = nil
 end
 
 function QuickChat:UpdateRebindingListener(t,dt)
@@ -577,8 +605,6 @@ function QuickChat:UpdateRebindingListener(t,dt)
 		
 	end
 end
-
-QuickChat._callback_bind_button = nil
 
 function QuickChat:LoadSettings()
 	if managers.controller:get_default_wrapper_type() == "pc" then
@@ -658,15 +684,15 @@ do --load Lua ini Parser
 end
 
 function QuickChat:GetRadialIdByKeybind(keyname)
-	return keyname and self._bindings[keyname]
+	for radial_id,_keyname in pairs(self._bindings) do 
+		if _keyname == keyname then
+			return radial_id
+		end
+	end
 end
 
 function QuickChat:GetKeybindByRadialId(radial_id)
-	for keyname,_radial_id in pairs(self._bindings) do 
-		if _radial_id == radial_id then
-			return keyname
-		end
-	end
+	return radial_id and self._bindings[radial_id]
 end
 
 Hooks:Add("MenuManagerSetupCustomMenus","QuickChat_MenuManagerSetupCustomMenus",function(menu_manager, nodes)
@@ -679,6 +705,7 @@ end)
 
 Hooks:Add("MenuManagerPopulateCustomMenus","QuickChat_MenuManagerPopulateCustomMenus",function(menu_manager, nodes)
 	local quickchat_main_menu_id = "quickchat_menu_main"
+	local unbound_text = managers.localization:text("qc_bind_status_unbound")
 	
 	--create menus for each user radial, in alphabetical order
 	local radial_keys = {}
@@ -688,18 +715,32 @@ Hooks:Add("MenuManagerPopulateCustomMenus","QuickChat_MenuManagerPopulateCustomM
 	table.sort(radial_keys)
 	local num_keys = #radial_keys
 	local num_options = 3
+	
 	local num_items = num_keys * num_options
+	
+	local function refresh_menu_item(menu_id,index,new_text)
+		local parent_menu = MenuHelper:GetMenu(menu_id)
+		local item = parent_menu._items_list[1 + (num_items - index)]
+		if item then 
+			item._parameters.text_id = new_text
+			item._parameters.gui_node:_reload_item(item)
+		end
+	end
+	
 	for i,radial_id in ipairs(radial_keys) do 
-		local current_button = QuickChat:GetKeybindByRadialId(radial_id) or managers.localization:text("qc_bind_status_unbound")
+		local current_button = QuickChat:GetKeybindByRadialId(radial_id) or unbound_text
 --		local menu_id = string.format("quickchat_radial_menu_%i",i)
 --		local new_menu = MenuHelper:NewMenu(menu_id)
-		local j = num_items - (i - 1)
+		local j = i - 1
 		local radial_data = QuickChat._radial_menu_params[radial_id]
 		
 		local header_id = string.format("quickchat_radial_header_%i",i)
 		local item_id = string.format("quickchat_radial_button_%i",i)
 		local divider_id = string.format("quickchat_radial_divider_%i",i)
 		local callback_id = string.format("quickchat_radial_binding_%i",i)
+		local header_priority = num_items - (j * num_options)
+		local item_priority = header_priority - 1
+		local divider_priority = header_priority - 2
 		MenuHelper:AddButton({
 			id = header_id,
 			title = radial_id,
@@ -708,7 +749,7 @@ Hooks:Add("MenuManagerPopulateCustomMenus","QuickChat_MenuManagerPopulateCustomM
 			callback = nil,
 			menu_id = quickchat_main_menu_id,
 			disabled = true,
-			priority = num_items - (j % num_options)
+			priority = header_priority
 		})
 		MenuHelper:AddButton({
 			id = item_id,
@@ -718,54 +759,104 @@ Hooks:Add("MenuManagerPopulateCustomMenus","QuickChat_MenuManagerPopulateCustomM
 			callback = callback_id,
 			menu_id = quickchat_main_menu_id,
 			disabled = false,
-			priority = num_items - (j % num_options)
+			priority = item_priority
 		})
 		MenuHelper:AddDivider({
 			id = divider_id,
-			size = 8,
+			size = 16,
 			menu_id = quickchat_main_menu_id,
-			priority = num_items - (j % num_options)
+			priority = divider_priority
 		})
 		MenuCallbackHandler[callback_id] = function(self)
 			local title,desc
+			local button_unbind_name,button_cancel_name
 			if QuickChat:IsGamepadModeEnabled() then
 				title = "qc_menu_bind_prompt_controller_title"
 				desc = "qc_menu_bind_prompt_controller_desc"
+				button_unbind_name = "start"
+				button_cancel_name = "back"
 			else
 				title = "qc_menu_bind_prompt_keyboard_title"
 				desc = "qc_menu_bind_prompt_keyboard_desc"
+				button_unbind_name = "esc"
+				button_cancel_name = "backspace"
 			end
-			QuickChat._quickmenu_item = QuickMenu:new(managers.localization:text(title),managers.localization:text(desc),{
+			QuickChat._quickmenu_item = QuickMenu:new(
+				managers.localization:text(title),
+				managers.localization:text(desc,{BTN_UNBIND=button_unbind_name,BTN_CANCEL=button_cancel_name}),
 				{
-					text = managers.localization:text("qc_menu_dialog_accept"),
-					is_cancel_button = true
-				}
-			},true)
+					{
+						text = managers.localization:text("qc_menu_dialog_cancel"),
+						callback = function()
+							QuickChat:RemoveControllerInputListener()
+						end,
+						is_cancel_button = true
+					}
+				},
+				true
+			)
 			
+			--called on pressing a button in the bind dialog
 			QuickChat._callback_bind_button = function(self,button_name)
 				if self._quickmenu_item then 
 					self._quickmenu_item:Hide()
 					self._quickmenu_item = nil
 				end
-				if button_name == "esc" then 
-					--close and cancel
+				if button_name == button_unbind_name then 
+					--unbind and close
+					self._bindings[radial_id] = nil
+					QuickMenu:new(
+						managers.localization:text("qc_menu_bind_prompt_unbound_title"),
+						managers.localization:text("qc_menu_bind_prompt_unbound_title",{KEYNAME=utf8.to_upper(button_name),RADIAL=radial_id}),
+						{
+							{
+								text = managers.localization:text("qc_menu_dialog_accept"),
+								is_cancel_button = true
+							}
+						},
+						true
+					)
+					refresh_menu_item(quickchat_main_menu_id,item_priority,unbound_text)
 					return
+				elseif button_name == button_cancel_name then
+					--cancel, do nothing
+					return
+				else
+					
+					--internal keybind conflict detection
+					for _radial_id,_button_name in pairs(self._bindings) do 
+						if (_button_name == button_name) and (_radial_id ~= radial_id) then 
+							QuickMenu:new(
+								managers.localization:text("qc_menu_bind_prompt_conflict_title"),
+								managers.localization:text("qc_menu_bind_prompt_conflict_desc",{KEYNAME=utf8.to_upper(_button_name),RADIAL=_radial_id}),
+								{
+									{
+										text = managers.localization:text("qc_menu_dialog_accept"),
+										is_cancel_button = true
+									}
+								},
+								true
+							)
+							return
+						end
+					end
+					
+					self._bindings[radial_id] = button_name
+					QuickMenu:new(
+						managers.localization:text("qc_bind_status_success_title"),
+						managers.localization:text("qc_bind_status_success_desc",{KEYNAME=utf8.to_upper(button_name),RADIAL=radial_id}),
+						{
+							{
+								text = managers.localization:text("qc_menu_dialog_accept"),
+								is_cancel_button = true
+							},
+						},
+						true
+					)
+					self:CreateMenus()
+					refresh_menu_item(quickchat_main_menu_id,item_priority,managers.localization:text("qc_bind_status_title",{KEYNAME=utf8.to_upper(button_name)}))
 				end
 				
-				--conflict detection here
-				
-				
-				if current_button then
-					self._bindings[current_button] = nil
-				end
-				current_button = button_name
-				
-				self._bindings[button_name] = radial_id
-				QuickMenu:new(managers.localization:text("qc_bind_status_success_title"),managers.localization:text("qc_bind_status_success_desc",{KEYNAME=utf8.to_upper(button_name),RADIAL=radial_id}),{
-					text = managers.localization:text("qc_menu_dialog_accept"),
-					is_cancel_button = true
-				},true)
-				self:CreateMenus()
 				self:SaveSettings()
 				self._callback_bind_button = nil
 			end
@@ -847,7 +938,8 @@ end)
 
 Hooks:Add("BaseNetworkSessionOnLoadComplete","QuickChat_OnLoaded",callback(QuickChat,QuickChat,"Setup"))
 
-
+--Hooks:Add("GameSetupUpdate","QuickChat_GameUpdate",callback(QuickChat,QuickChat,"Update"))
+Hooks:Add("MenuUpdate","QuickChat_MenuUpdate",callback(QuickChat,QuickChat,"Update"))
 
 
 --[[
