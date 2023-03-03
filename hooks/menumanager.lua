@@ -1,19 +1,31 @@
---todo: in networksession hooks, send only to synced player?
---allow mouse button binding for keyboard users
---default data
---sometimes virtualcontroller input checking just breaks for no reason!
---make saves/QuickChat/layout/ directory
---needs third avenue for VR with kb/virtualcontroller
+--TODO
+	--SCHEMA
+		--inconsistency in gamepad mapping
+			--gamepads use the gamepad-specific name
+			--wrappers/binding detection use the generic name (action name)
+		--todo use _supported_controller_type_map instead of manual mapping
+		--todo: in networksession hooks, send only to synced player?
+		--make saves/QuickChat/layout/ directory
+		--needs third avenue for VR with kb/virtualcontroller
 
---custom radial messages (use QKI?)
---display current gamepad mode
---fix bindings to be radial:button instead of button:radial
-	--validate existing menus
-	--ensure that previous buttons are unbound
---internal binding conflict detection 
---preview radial in menu
---button combos?
---localize menu button names for controllers, per gamepad type
+	--FEATURES
+		--allow mouse button binding for keyboard users
+		--display current gamepad mode in menu
+		--customization
+			--custom radial messages (use QKI?)
+			--preview radial in menu
+			--button combos?
+		--localize menu button names for controllers, per gamepad type
+		--allow selecting button by waiting at menu (for controllers) for x seconds
+			--(this allows controllers to bind or reserve any options they desire, without interfering with menu operation)
+
+	--BUGS
+		--[STALE] sometimes virtualcontroller input checking just breaks for no reason!
+
+
+
+
+
 
 QuickChat = QuickChat or {
 	_radial_menu_manager = nil, --for reference
@@ -178,6 +190,8 @@ function QuickChat:UnpackGamepadBindings()
 		else
 			for wrapperbutton,virtualbutton in pairs(allowed_wrapper_buttons) do
 				QuickChat._allowed_binding_buttons.virtualcontroller[Idstring(virtualbutton):key()] = virtualbutton
+																		--must be wrapperbutton for menu bind detection
+																		--must be virtualbuttonn for ingame bind detection
 			end
 		end
 	end
@@ -396,13 +410,22 @@ end
 function QuickChat:GetController()
 	local controller
 	if self:IsGamepadModeEnabled() then 
+		local cm = managers.controller
+		local index = Global.controller_manager.default_wrapper_index or cm:get_preferred_default_wrapper_index()
+		
+		local controller_index = cm._wrapper_to_controller_list[index][1]
+		controller = Input:controller(controller_index)
+		--[[
 		local player_unit = managers.player and managers.player:local_player()
+		local wrapper = managers.system_menu:_get_controller()
 		if alive(player_unit) then 
 			local state = player_unit:movement():current_state()
-			local _controller = state._controller or managers.system_menu:_get_controller()
-			local ci = _controller._id
-			controller = Input:controller(ci)
+			wrapper = state._controller or wrapper
 		end
+		local wrapper_index = wrapper and wrapper._id
+--		local controller_index = wrapper_index and managers.controller._wrapper_to_controller_list[wrapper_index]
+		controller = wrapper_index and Input:controller(wrapper_index)
+		--]]
 	else
 		controller = Input:keyboard()
 	end
@@ -427,7 +450,8 @@ function QuickChat:UpdateGame(t,dt)
 	for button_name_ids,input_data in pairs(self._input_cache) do 
 		
 		local menu = self:GetMenu(input_data.id)
-		local state = controller:down(button_name_ids)
+		local state = controller:down(button_name_ids) 
+		
 --		_G.Console:SetTracker(string.format("Key down %s,%.1f,",state,t),1)
 		if menu then
 			if state then 
@@ -660,7 +684,7 @@ function QuickChat:LoadControllerBindings()
 			self._bindings[k] = v
 		end
 	else
-		self:Save()
+		self:SaveControllerBindings()
 	end
 end
 function QuickChat:LoadKeyboardBindings()
