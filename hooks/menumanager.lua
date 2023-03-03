@@ -1,8 +1,19 @@
 --todo: in networksession hooks, send only to synced player?
---input check in update should save a flag for is_controller, and check Input:mouse() for pc input
+--allow mouse button binding for keyboard users
 --default data
 --sometimes virtualcontroller input checking just breaks for no reason!
 --make saves/QuickChat/layout/ directory
+--needs third avenue for VR with kb/virtualcontroller
+
+--custom radial messages (use QKI?)
+--display current gamepad mode
+--fix bindings to be radial:button instead of button:radial
+	--validate existing menus
+	--ensure that previous buttons are unbound
+--internal binding conflict detection 
+--update binding preview in menu
+--button combos?
+
 
 QuickChat = QuickChat or {
 	_radial_menu_manager = nil, --for reference
@@ -11,17 +22,27 @@ QuickChat = QuickChat or {
 QuickChat._core = QuickChatCore
 QuickChat._mod_path = (QuickChatCore and QuickChatCore.GetPath and QuickChatCore:GetPath()) or ModPath
 QuickChat._save_path = SavePath .. "QuickChat/"
+QuickChat._keyboard_bindings_name = "keyboard_bindings.json"
+QuickChat._controller_bindings_name = "controller_bindings.json"
+--vr bindings?
 QuickChat._settings_name = "settings.json"
-QuickChat.settings = {
-	pc = {
-		j = "callouts_1"
-	},
-	controller_generic = {
-		left = "callouts_1"
-	}
-} --general user pref
+QuickChat.default_settings = {}
+QuickChat.settings = {} --general user pref (unused)
 QuickChat.sort_settings = {}
-
+QuickChat._bindings = {
+--[[
+	keyboard = {
+		["j"] = "callouts_1",
+		["k"] = "deployables_1",
+		["l"] = "custom_1"
+	},
+	virtualcontroller = {
+		["left"] = "callouts_1",
+		["right"] = "deployables_1",
+		["push_to_talk"] = "custom_1"
+	}
+	--]]
+}
 QuickChat.SYNC_MESSAGE_PRESET = "QuickChat_message_preset"
 QuickChat.SYNC_MESSAGE_REGISTER = "QuickChat_Register"
 QuickChat.API_VERSION = "1" -- string!
@@ -57,37 +78,114 @@ QuickChat._preset_callbacks = {
 		end
 	end
 }
-QuickChat.radial_menus = {} --generated radial menus
+QuickChat._radial_menus = {} --generated radial menus
 QuickChat._radial_menu_params = {} --ungenerated radial menus; populated with user data
 
-QuickChat.input_cache = {}
-QuickChat.bindings = {
-	mousekeyboard = {
-		["j"] = "callouts_1",
-		["k"] = "deployables_1",
-		["l"] = "custom_1"
-	},
-	virtualcontroller = {
-		["left"] = "callouts_1",
-		["right"] = "deployables_1",
-		["push_to_talk"] = "custom_1"
-	}
-	--[[
+QuickChat._input_cache = {}
+
+QuickChat.allowed_binding_buttons = { --wrapper-specific bindings
 	pc = {
-		["j"] = "callouts_1"
+		buttons = { --the index of each these buttons as far as the controller is concerned is generally derived from its position on the keyboard, from left to right, then top to bottom (ie western book-reading order)
+			--numbers
+			"1","2","3","4","5","6","7","8","9","0",
+			--letters
+			"a","b","c","d","e","f","g","h","j","i","k","l","m","n","o","p","q","r","s","t","u","v","w","x","y","z",
+			--function key row
+			"f1","f2","f3","f4","f5","f6","f7","f8","f9","f10","f11","f12",
+			--punctuations and symbols
+			"'","\\",",","=","`","[","-",".","]",";","/"," ",
+			--arrow keys
+			"up","down","left","right",
+			--control keys
+			"backspace","caps lock","delete","end","enter","esc","home","insert","left alt","left ctrl","left shift","left windows","page down","page up","right alt","right ctrl","right shift","right windows","scroll lock","sys rq","tab",
+			--numpad
+			"num 0","num 1","num 2","num 3","num 4","num 5","num 6","num 7","num 8","num 9","num lock","num ,","num enter","num =","num +","num .","num /","num -","num *",
+			--application and media keys
+			"applications","calculator","mail","media select","media stop","mute","my computer","next track","pause","play pause","power","prev track","sleep","volume up","volume down","wake","web back","web favorites","web forward","web home","web refresh","web search","web stop",
+			--international keys
+			"num abnt c1","num abnt c2","@","ax",":","convert","kana","kanji","no convert","oem 102","stop","_","unlabeled","yen"
+		},
+		axis = {} --no axes for keyboards; mouse axis input is handled separately
 	},
-	--platform specific bindings
-	,ps3 = {},
-	ps4 = {},
-	xb1 = {},
 	xbox360 = {
-		["left"] = "callouts_1"
+		buttons = {
+			["d_up"] = "weapon_gadget",
+			["d_down"] = "push_to_talk",
+			["d_left"] = "left",
+			["d_right"] = "right",
+			["start"] = "start",
+			["back"] = "back",
+			["left_thumb"] = "run",
+			["right_thumb"] = "melee",
+			["left_shoulder"] = "use_item",
+			["right_shoulder"] = "interact",
+			["left_trigger"] = "trigger_left",
+			["right_trigger"] = "trigger_right",
+			["a"] = "confirm",
+			["b"] = "cancel",
+			["x"] = "reload",
+			["y"] = "switch_weapon"
+		},
+		axis = {
+			["left"] = "move",
+			["right"] = "look",
+			["dpad"] = "dpad" --no idea if this is correct!
+		}
 	},
-	gamepad = {},
-	vr = {},
-	steam = {}
-	--]]
+	ps3 = {
+		buttons = {
+			["d_up"] = "weapon_gadget",
+			["d_down"] = "push_to_talk",
+			["d_left"] = "left",
+			["d_right"] = "right",
+			["start"] = "start",
+			["back"] = "back",
+			["left_thumb"] = "run",
+			["right_thumb"] = "melee",
+			["left_shoulder"] = "use_item",
+			["right_shoulder"] = "interact",
+			["left_trigger"] = "trigger_left",
+			["right_trigger"] = "trigger_right",
+			["cross"] = "confirm",
+			["circle"] = "cancel",
+			["square"] = "reload",
+			["triangle"] = "switch_weapon"
+		},
+		axis = {
+			["left"] = "move",
+			["right"] = "look",
+			["dpad"] = "dpad"
+		}
+	}
 }
+QuickChat.allowed_binding_buttons.ps4 = QuickChat.allowed_binding_buttons.ps3
+QuickChat.allowed_binding_buttons.xb1 = QuickChat.allowed_binding_buttons.xbox360
+
+QuickChat._allowed_binding_buttons = {
+	keyboard = {},
+	virtualcontroller = {}
+}
+
+function QuickChat:IsGamepadModeEnabled()
+	return managers.controller and managers.controller:get_default_wrapper_type() ~= "pc"
+end
+
+function QuickChat:UnpackGamepadBindings()
+	local wrapper_type = managers.controller:get_default_wrapper_type()
+	local allowed_wrapper_bindings = self.allowed_binding_buttons[wrapper_type]
+	if allowed_wrapper_bindings then 
+		local allowed_wrapper_buttons = allowed_wrapper_bindings.buttons
+		if wrapper_type == "pc" then 
+			for _,wrapperbutton in pairs(allowed_wrapper_buttons) do
+				QuickChat._allowed_binding_buttons.keyboard[Idstring(wrapperbutton):key()] = wrapperbutton
+			end
+		else
+			for wrapperbutton,virtualbutton in pairs(allowed_wrapper_buttons) do
+				QuickChat._allowed_binding_buttons.virtualcontroller[Idstring(virtualbutton):key()] = virtualbutton
+			end
+		end
+	end
+end
 
 function QuickChat:LoadCustomRadials()
 	if self._lip then
@@ -258,38 +356,32 @@ function QuickChat:LoadMenuFromIni(ini_data)
 	end
 end
 
-function QuickChat:CreateMenus()
-	local wrapper_type = managers.controller:get_default_wrapper_type()
-	self._gamepad_mode_enabled = wrapper_type ~= "pc"
-	
-	local control_type
-	if self._gamepad_mode_enabled then 
-		control_type = "virtualcontroller"
-	else
-		control_type = "mousekeyboard"
-	end
-	--only create menu objects for radial menus that are bound to at least one key
-	local binding_data = self.bindings[control_type]
-	if binding_data then
-		for button_name,radial_id in pairs(binding_data) do
-			local button_name_ids = Idstring(button_name)
-			self.input_cache[button_name_ids] = {id = radial_id,state = false}
-			if not self.radial_menus[radial_id] then
-				local radial_menu_params = self._radial_menu_params[radial_id]
-				local new_menu = self._radial_menu_manager:NewMenu(radial_menu_params)
-				self.radial_menus[radial_id] = new_menu
-			end
-		end
-	end
+function QuickChat:Setup()
+	self:CreateMenus()
 	BeardLib:AddUpdater("quickchat_update_keyboard_input",callback(self,self,"Update"))
 end
 
-function QuickChat:Update(t,dt)
-	local player_unit,player_alive
-	if self._gamepad_mode_enabled then 
-		player_unit = managers.player and managers.player:local_player()
-		player_alive = player_unit and alive(player_unit)
-		if player_alive then 
+function QuickChat:CreateMenus()
+	--only create menu objects for radial menus that are bound to at least one key
+	local binding_data = self._bindings
+	if binding_data then
+		for button_name,radial_id in pairs(binding_data) do
+			local button_name_ids = Idstring(button_name)
+			self._input_cache[button_name_ids] = {id = radial_id,state = false,button_name = button_name}
+			if not self._radial_menus[radial_id] then
+				local radial_menu_params = self._radial_menu_params[radial_id]
+				local new_menu = self._radial_menu_manager:NewMenu(radial_menu_params)
+				self._radial_menus[radial_id] = new_menu
+			end
+		end
+	end
+end
+
+function QuickChat:GetController()
+	local controller
+	if self:IsGamepadModeEnabled() then 
+		local player_unit = managers.player and managers.player:local_player()
+		if alive(player_unit) then 
 			local state = player_unit:movement():current_state()
 			local _controller = state._controller or managers.system_menu:_get_controller()
 			local ci = _controller._id
@@ -298,11 +390,15 @@ function QuickChat:Update(t,dt)
 	else
 		controller = Input:keyboard()
 	end
-	
-	if not controller then return end
-	
-	
-	for button_name_ids,input_data in pairs(self.input_cache) do 
+	return controller
+end
+
+function QuickChat:Update(t,dt)
+	local controller = self:GetController()
+	if not controller then
+		return
+	end
+	for button_name_ids,input_data in pairs(self._input_cache) do 
 		
 		local menu = self:GetMenu(input_data.id)
 		local state = controller:down(button_name_ids)
@@ -320,12 +416,16 @@ function QuickChat:Update(t,dt)
 			else
 				if input_data.state then
 --					_G.Console:SetTracker(string.format("hide %.1f",t),4)
-					if self._gamepad_mode_enabled and player_alive then 
-						local camera = player_unit:camera()
-						local fpcamera_unit = camera and camera._camera_unit
-						local fpcamera_base = fpcamera_unit and fpcamera_unit:base()
-						if fpcamera_base then
-							fpcamera_base._last_rot_t = nil
+					if self:IsGamepadModeEnabled() then 
+						
+						local player_unit = managers.player:local_player()
+						if alive(player_unit) then
+							local camera = player_unit:camera()
+							local fpcamera_unit = camera and camera._camera_unit
+							local fpcamera_base = fpcamera_unit and fpcamera_unit:base()
+							if fpcamera_base then
+								fpcamera_base._last_rot_t = nil
+							end
 						end
 						
 					end
@@ -336,15 +436,15 @@ function QuickChat:Update(t,dt)
 		
 		input_data.state = state
 	end
-	
+
 end
 
 function QuickChat:GetMenu(id)
-	return id and self.radial_menus[id]
+	return id and self._radial_menus[id]
 end
 
 function QuickChat:ToggleMenu(id)
-	local menu = id and self.radial_menus[id]
+	local menu = id and self._radial_menus[id]
 	if menu then 
 		menu:Toggle()
 	end
@@ -428,21 +528,112 @@ function QuickChat:SendSyncPeerVersionToAll()
 	LuaNetworking:SendToPeers(self.SYNC_MESSAGE_REGISTER,self.API_VERSION)
 end
 
-function QuickChat:LoadSettings()
-	if self._lip then 
-		--[[
-		local save_file_name = self._save_path .. self._settings_name
-		if file.FileExists(save_file_name) then
-			local save_data = self._lip.load(save_file_name)
-			local settings_data = save_data.Settings
-			local bindings_data = save_data.Bindings
+function QuickChat:AddControllerInputListener()
+	BeardLib:AddUpdater("quickchat_update_rebinding",callback(self,self,"UpdateRebindingListener"))
+end
+
+function QuickChat:RemoveControllerInputListener()
+	BeardLib:RemoveUpdater("quickchat_update_rebinding")
+end
+
+function QuickChat:UpdateRebindingListener(t,dt)
+	--options: --pressed_list --released_list --down_list 
+	local controller = self:GetController()
+	if controller then
+		local pressed_list = controller:pressed_list()
+		local gamepad_mode_enabled = self:IsGamepadModeEnabled()
+		if #pressed_list > 0 then
+			for _,button_index in ipairs(pressed_list) do 
+				local button_ids = controller:button_name(button_index)
+				local button_ids_key = button_ids:key()
+				
+				if gamepad_mode_enabled then 
+					if self._allowed_binding_buttons.virtualcontroller[button_ids_key] then
+						local button_name = self._allowed_binding_buttons.virtualcontroller[button_ids_key]
+						--associate that menu with this button
+--						self:Log("detected controller " .. button_name)
+						if self._callback_bind_button then
+							self:_callback_bind_button(button_name)
+						end
+						self:RemoveControllerInputListener()
+						break
+					end
+				else
+					if self._allowed_binding_buttons.keyboard[button_ids_key] then
+						local button_name = self._allowed_binding_buttons.keyboard[button_ids_key]
+						--associate that menu with this button
+--						self:Log("detected keyboard " .. button_name)
+						if self._callback_bind_button then
+							self:_callback_bind_button(button_name)
+						end
+						self:RemoveControllerInputListener()
+						break
+					end
+				end
+			end
+		elseif not gamepad_mode_enabled then
+			--check mouse input
 		end
-		--]]
+		
+	end
+end
+
+QuickChat._callback_bind_button = nil
+
+function QuickChat:LoadSettings()
+	if managers.controller:get_default_wrapper_type() == "pc" then
+		self:LoadKeyboardBindings()
+	else
+		self:LoadControllerBindings()
 	end
 end
 
 function QuickChat:SaveSettings()
-	
+	if managers.controller:get_default_wrapper_type() == "pc" then
+		self:SaveKeyboardBindings()
+	else
+		self:SaveControllerBindings()
+	end
+end
+
+function QuickChat:SaveControllerBindings()
+	local save_path = self._save_path .. self._controller_bindings_name
+	local file = io.open(save_path,"w+")
+	if file then
+		file:write(json.encode(self._bindings))
+		file:close()
+	end
+end
+function QuickChat:SaveKeyboardBindings()
+	local save_path = self._save_path .. self._keyboard_bindings_name
+	local file = io.open(save_path,"w+")
+	if file then
+		file:write(json.encode(self._bindings))
+		file:close()
+	end
+end
+
+function QuickChat:LoadControllerBindings()
+	local save_path = self._save_path .. self._controller_bindings_name
+	local file = io.open(save_path, "r")
+	if file then
+		for k, v in pairs(json.decode(file:read("*all"))) do
+			self._bindings[k] = v
+		end
+	else
+		self:Save()
+	end
+end
+function QuickChat:LoadKeyboardBindings()
+	local save_path = self._save_path .. self._keyboard_bindings_name
+	local file = io.open(save_path, "r")
+	if file then
+		for k, v in pairs(json.decode(file:read("*all"))) do
+			self._bindings[k] = v
+		end
+	else
+		self:SaveSettings()
+	end
 end
 
 do --load RadialMenu
@@ -466,20 +657,178 @@ do --load Lua ini Parser
 	end
 end
 
+function QuickChat:GetRadialIdByKeybind(keyname)
+	return keyname and self._bindings[keyname]
+end
+
+function QuickChat:GetKeybindByRadialId(radial_id)
+	for keyname,_radial_id in pairs(self._bindings) do 
+		if _radial_id == radial_id then
+			return keyname
+		end
+	end
+end
+
 Hooks:Add("MenuManagerSetupCustomMenus","QuickChat_MenuManagerSetupCustomMenus",function(menu_manager, nodes)
-	
-end)
-Hooks:Add("MenuManagerPopulateCustomMenus","QuickChat_MenuManagerPopulateCustomMenus",function(menu_manager, nodes)
-	
-end)
-Hooks:Add("MenuManagerBuildCustomMenus","QuickChat_MenuManagerBuildCustomMenus",function(menu_manager, nodes)
-	
-end)
-Hooks:Add("MenuManagerInitialize","QuickChat_MenuManagerInitialize",function(menu_manager)
+	QuickChat:UnpackGamepadBindings()
 	QuickChat:LoadSettings()
-	
 	QuickChat:LoadCustomRadials()
-	QuickChat:CreateMenus()
+	
+	MenuHelper:NewMenu("quickchat_menu_main")
+end)
+
+Hooks:Add("MenuManagerPopulateCustomMenus","QuickChat_MenuManagerPopulateCustomMenus",function(menu_manager, nodes)
+	local quickchat_main_menu_id = "quickchat_menu_main"
+	
+	--create menus for each user radial, in alphabetical order
+	local radial_keys = {}
+	for radial_id,radial_data in pairs(QuickChat._radial_menu_params) do 
+		table.insert(radial_keys,radial_id)
+	end
+	table.sort(radial_keys)
+	local num_keys = #radial_keys
+	local num_options = 3
+	local num_items = num_keys * num_options
+	for i,radial_id in ipairs(radial_keys) do 
+		local current_button = QuickChat:GetKeybindByRadialId(radial_id) or managers.localization:text("qc_bind_status_unbound")
+--		local menu_id = string.format("quickchat_radial_menu_%i",i)
+--		local new_menu = MenuHelper:NewMenu(menu_id)
+		local j = num_items - (i - 1)
+		local radial_data = QuickChat._radial_menu_params[radial_id]
+		
+		local header_id = string.format("quickchat_radial_header_%i",i)
+		local item_id = string.format("quickchat_radial_button_%i",i)
+		local divider_id = string.format("quickchat_radial_divider_%i",i)
+		local callback_id = string.format("quickchat_radial_binding_%i",i)
+		MenuHelper:AddButton({
+			id = header_id,
+			title = radial_id,
+			desc = "",
+			localized = false,
+			callback = nil,
+			menu_id = quickchat_main_menu_id,
+			disabled = true,
+			priority = num_items - (j % num_options)
+		})
+		MenuHelper:AddButton({
+			id = item_id,
+			title = managers.localization:text("qc_bind_status_title",{KEYNAME=utf8.to_upper(current_button)}),
+			desc = managers.localization:text("qc_bind_status_desc"),
+			localized = false,
+			callback = callback_id,
+			menu_id = quickchat_main_menu_id,
+			disabled = false,
+			priority = num_items - (j % num_options)
+		})
+		MenuHelper:AddDivider({
+			id = divider_id,
+			size = 8,
+			menu_id = quickchat_main_menu_id,
+			priority = num_items - (j % num_options)
+		})
+		MenuCallbackHandler[callback_id] = function(self)
+			local title,desc
+			if QuickChat:IsGamepadModeEnabled() then
+				title = "qc_menu_bind_prompt_controller_title"
+				desc = "qc_menu_bind_prompt_controller_desc"
+			else
+				title = "qc_menu_bind_prompt_keyboard_title"
+				desc = "qc_menu_bind_prompt_keyboard_desc"
+			end
+			QuickChat._quickmenu_item = QuickMenu:new(managers.localization:text(title),managers.localization:text(desc),{
+				{
+					text = managers.localization:text("qc_menu_dialog_accept"),
+					is_cancel_button = true
+				}
+			},true)
+			
+			QuickChat._callback_bind_button = function(self,button_name)
+				if self._quickmenu_item then 
+					self._quickmenu_item:Hide()
+					self._quickmenu_item = nil
+				end
+				if button_name == "esc" then 
+					--close and cancel
+					return
+				end
+				
+				--conflict detection here
+				
+				
+				if current_button then
+					self._bindings[current_button] = nil
+				end
+				current_button = button_name
+				
+				self._bindings[button_name] = radial_id
+				QuickMenu:new(managers.localization:text("qc_bind_status_success_title"),managers.localization:text("qc_bind_status_success_desc",{KEYNAME=utf8.to_upper(button_name),RADIAL=radial_id}),{
+					text = managers.localization:text("qc_menu_dialog_accept"),
+					is_cancel_button = true
+				},true)
+				self:CreateMenus()
+				self:SaveSettings()
+				self._callback_bind_button = nil
+			end
+			
+			QuickChat:AddControllerInputListener()
+		end
+	end
+	
+--[[
+	MenuHelper:AddButton({
+		id = "qc_open_bind_menu",
+		title = "qc_open_bind_menu_title",
+		desc = "qc_open_bind_menu_desc",
+		callback = "callback_qc_button_open_bind_menu",
+		menu_id = "quickchat_menu_main",
+		priority = 2
+	})
+	
+	MenuCallbackHandler.callback_qc_button_open_bind_menu = function(self)
+		QuickChat._quickmenu_item = QuickMenu:new("hello","description here!",{
+			{
+				text = "k",
+				is_cancel_button = true
+			}
+		},true)
+		QuickChat:AddControllerInputListener()
+	end
+	
+	MenuHelper:AddButton({
+		id = "ach_hitmarkers_hit_set_headshot_color",
+		title = "menu_ach_hitmarkers_hit_set_headshot_color_title",
+		desc = "menu_ach_hitmarkers_hit_set_headshot_color_desc",
+		callback = "callback_ach_hitmarkers_hit_set_headshot_color",
+		menu_id = AdvancedCrosshair.hitmarkers_menu_id,
+		disabled = true,
+		priority = 1
+	})
+	
+	--]]
+end)
+
+Hooks:Add("MenuManagerBuildCustomMenus","QuickChat_MenuManagerBuildCustomMenus",function(menu_manager, nodes)
+		nodes.quickchat_menu_main = MenuHelper:BuildMenu(
+		"quickchat_menu_main",{
+			area_bg = "none",
+			back_callback = nil,
+			focus_changed_callback = nil
+		}
+	)
+	MenuHelper:AddMenuItem(nodes.blt_options,"quickchat_menu_main","qc_menu_main_title","qc_menu_main_desc")
+	
+end)
+
+Hooks:Add("MenuManagerInitialize","QuickChat_MenuManagerInitialize",function(menu_manager)
+--	QuickChat:Setup()
+end) 
+
+Hooks:Register("QuickChat_LoadCustomRadials")
+Hooks:Add("QuickChat_LoadCustomRadials","QuickChat_OnLoadCustomRadials",function(data) --not fully implemented
+	local radial_id,new_radial_data = self:LoadMenuFromIni(data)
+	if new_radial_data then
+		self._radial_menu_params[radial_id] = new_radial_data
+	end
 end)
 
 Hooks:Add("LocalizationManagerPostInit","QuickChat_LocalizationManagerPostInit",function(loc)
@@ -496,40 +845,53 @@ Hooks:Add("NetworkReceivedData","QuickChat_NetworkReceivedData",function(sender,
 	end
 end)
 
+Hooks:Add("BaseNetworkSessionOnLoadComplete","QuickChat_OnLoaded",callback(QuickChat,QuickChat,"Setup"))
 
 
---Hooks:Add("BaseNetworkSessionOnLoadComplete","QuickChat_OnLoaded",callback(QuickChat,QuickChat,"CreateMenus"))
 
 
---[[ input button name reference
+--[[
+--input button name reference
+--sorted by US standard keyboard layout
+QuickChat._buttons_list = {
 	--inputs from any given input device (keyboard, xbox360/xb1/ps3/ps4/steam controller) are translated into a VirtualController,
 	--which uses generic input names instead of device-specific input names
+	keyboard = {
+		"1",
+		"2",
+		"3",
+		"4",
+		"5",
+		"6",
+	},
+	virtualcontroller = {
+		--below are the generic input names
+		buttons = {
+			"confirm", -- a
+			"cancel", -- b
+			"reload", -- x
+			"switch_weapon", -- y
+			"start", -- start
+			"back", -- back
+			"weapon_gadget", -- d-pad up
+			"push_to_talk", -- d-pad down
+			"left", -- d-pad left
+			"right", -- d-pad right
+			"use_item", -- left bumper
+			"interact", -- right bumper
+			"trigger_right", -- right trigger
+			"trigger_left", -- left trigger
+			"run", -- left thumbstick down
+			"melee" -- right thumbstick down
+		},
+		axis = {
+			--these are for analog inputs, which provide a table containing inputs for the x and y axis
+			--d-pad is also provided as an analog axis input as well as digital button input but i don't feel like looking it up rn
+			"move",
+			"look"
+		}
+	},
 	
-	--below are the generic input names
 	
-	local buttons = {
-		"confirm", -- a
-		"cancel", -- b
-		"reload", -- x
-		"switch_weapon", -- y
-		"start", -- start
-		"back", -- back
-		"weapon_gadget", -- d-pad up
-		"push_to_talk", -- d-pad down
-		"left", -- d-pad left
-		"right", -- d-pad right
-		"use_item", -- left bumper
-		"interact", -- right bumper
-		"trigger_right", -- right trigger
-		"trigger_left", -- left trigger
-		"run", -- left thumbstick down
-		"melee" -- right thumbstick down
-	}
-	
-	--these are for analog inputs, which provide a table containing inputs for the x and y axis
-	--d-pad is also provided as an analog axis input as well as digital button input but i don't feel like looking it up rn
-	local axis = {
-		"move",
-		"look"
-	}
+}
 --]]

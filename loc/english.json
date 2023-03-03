@@ -16,5 +16,30 @@
 	"qc_ptm_need_tripmine" : "Place a Trip Mine here!",
 	"qc_ptm_need_shapedcharge" : "Place a Shaped Charge here!",
 	"qc_ptm_need_grenades" : "Place a Grenade Crate here!",
-	"qc_ptm_need_convert" : "I need a convert!"
+	"qc_ptm_need_convert" : "I need a convert!",
+	
+	"qc_controller_pc" : "Mouse + Keyboard",
+	"qc_controller_xbox360" : "Xbox 360 Controller",
+	"qc_controller_xb1" : "Xbox One Controller",
+	"qc_controller_ps3" : "PlayStation 3 Controller",
+	"qc_controller_ps4" : "PlayStation 4 Controller",
+	"qc_controller_vr" : "VR Controller",
+	"qc_steam" : "Steam Controller",
+	"qc_gamepad" : "Generic Controller",
+	
+	"qc_menu_main_title" : "QuickChat",
+	"qc_menu_main_desc" : "Edit QuickChat Settings",
+	
+	"qc_open_bind_menu_title" : "Bind a key...",
+	
+	"qc_menu_dialog_accept" : "Okay",
+	"qc_menu_bind_prompt_keyboard_title" : "Bind a keyboard key",
+	"qc_menu_bind_prompt_keyboard_desc" : "Waiting for keyboard input...",
+	"qc_menu_bind_prompt_controller_title" : "Bind a controller button",
+	"qc_menu_bind_prompt_controller_desc" : "Waiting for controller input...",
+	"qc_bind_status_success_title" : "Success",
+	"qc_bind_status_success_desc" : "Bound [$RADIAL] to [$KEYNAME].",
+	"qc_bind_status_unbound" : "[Unbound]",
+	"qc_bind_status_title" : "Bound to: [$KEYNAME]",
+	"qc_bind_status_desc" : "Bind a key to open this radial menu."
 }
