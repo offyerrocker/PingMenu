@@ -196,28 +196,13 @@ do --load Lua ini Parser
 	end
 end
 
-function QuickChat:IsGamepadModeEnabled()
-	return managers.controller and managers.controller:get_default_wrapper_type() ~= "pc"
-end
-
-function QuickChat:UnpackGamepadBindings()
-	local wrapper_type = managers.controller:get_default_wrapper_type()
-	local allowed_wrapper_bindings = self.allowed_binding_buttons[wrapper_type]
-	if allowed_wrapper_bindings then 
-		local allowed_wrapper_buttons = allowed_wrapper_bindings.buttons
-		if wrapper_type == "pc" then 
-			for _,wrapperbutton in pairs(allowed_wrapper_buttons) do
-				QuickChat._allowed_binding_buttons.keyboard[Idstring(wrapperbutton):key()] = wrapperbutton
-			end
-		else
-			for wrapperbutton,virtualbutton in pairs(allowed_wrapper_buttons) do
-				QuickChat._allowed_binding_buttons.virtualcontroller[Idstring(virtualbutton):key()] = virtualbutton
-																		--must be wrapperbutton for menu bind detection
-																		--must be virtualbuttonn for ingame bind detection
-			end
-		end
+function QuickChat:Log(msg)
+	if Console then
+		Console:Log(msg)
 	end
 end
+
+--Setup
 
 function QuickChat:LoadCustomRadials()
 	if self._lip then
@@ -286,7 +271,106 @@ function QuickChat:LoadCustomRadials()
 	end
 end
 
-function QuickChat:LoadMenuFromIni(ini_data)
+function QuickChat:Setup()
+	self:CreateMenus()
+	self:AddUpdater("QuickChat_UpdateInGame",callback(self,self,"UpdateGame"))
+end
+
+function QuickChat:CreateMenus()
+	--only create menu objects for radial menus that are bound to at least one key
+	local binding_data = self._bindings
+	if binding_data then
+		for radial_id,button_name in pairs(binding_data) do
+			local button_name_ids = Idstring(button_name)
+			self._input_cache[button_name_ids] = {id = radial_id,state = false,button_name = button_name}
+			if not self._radial_menus[radial_id] then
+				local radial_menu_params = self._radial_menu_params[radial_id]
+				if radial_menu_params then
+					local new_menu = self._radial_menu_manager:NewMenu(radial_menu_params)
+					self._radial_menus[radial_id] = new_menu
+				else
+					self:Log("Error creating menu: " .. tostring(radial_id))
+				end
+			end
+		end
+	end
+end
+
+function QuickChat:ClearInputCache()
+	for button_name_ids,input_data in pairs(self._input_cache) do 
+		local menu = self:GetMenu(input_data.id)
+		if menu then 
+			menu:Hide(false) --do not activate "confirm" callback
+		end
+		self._input_cache[button_name_ids] = nil
+	end
+end
+
+--Keybind and Input Management
+
+function QuickChat:GetRadialIdByKeybind(keyname)
+	for radial_id,_keyname in pairs(self._bindings) do 
+		if _keyname == keyname then
+			return radial_id
+		end
+	end
+end
+
+function QuickChat:GetKeybindByRadialId(radial_id)
+	return radial_id and self._bindings[radial_id]
+end
+
+function QuickChat:IsGamepadModeEnabled()
+	return managers.controller and managers.controller:get_default_wrapper_type() ~= "pc"
+end
+
+function QuickChat:UnpackGamepadBindings()
+	local wrapper_type = managers.controller:get_default_wrapper_type()
+	local allowed_wrapper_bindings = self.allowed_binding_buttons[wrapper_type]
+	if allowed_wrapper_bindings then 
+		local allowed_wrapper_buttons = allowed_wrapper_bindings.buttons
+		if wrapper_type == "pc" then 
+			for _,wrapperbutton in pairs(allowed_wrapper_buttons) do
+				QuickChat._allowed_binding_buttons.keyboard[Idstring(wrapperbutton):key()] = wrapperbutton
+			end
+		else
+			for wrapperbutton,virtualbutton in pairs(allowed_wrapper_buttons) do
+				QuickChat._allowed_binding_buttons.virtualcontroller[Idstring(virtualbutton):key()] = virtualbutton
+																		--must be wrapperbutton for menu bind detection
+																		--must be virtualbuttonn for ingame bind detection
+			end
+		end
+	end
+end
+
+function QuickChat:GetController()
+	local controller
+	if self:IsGamepadModeEnabled() then 
+		local cm = managers.controller
+		local index = Global.controller_manager.default_wrapper_index or cm:get_preferred_default_wrapper_index()
+		
+		local controller_index = cm._wrapper_to_controller_list[index][1]
+		controller = Input:controller(controller_index)
+		--[[
+		local player_unit = managers.player and managers.player:local_player()
+		local wrapper = managers.system_menu:_get_controller()
+		if alive(player_unit) then 
+			local state = player_unit:movement():current_state()
+			wrapper = state._controller or wrapper
+		end
+		local wrapper_index = wrapper and wrapper._id
+--		local controller_index = wrapper_index and managers.controller._wrapper_to_controller_list[wrapper_index]
+		controller = wrapper_index and Input:controller(wrapper_index)
+		--]]
+	else
+		controller = Input:keyboard()
+	end
+	return controller
+end
+
+--Radial Menu Management
+
+function QuickChat:LoadMenuFromIni(ini_data) --converts and validates saved data from ini format into a table ready to be passed to the radial menu constructor
 	if ini_data then
 		local new_menu_params = {
 			items = {}
@@ -388,127 +472,6 @@ function QuickChat:LoadMenuFromIni(ini_data)
 	end
 end
 
-function QuickChat:Setup()
-	self:CreateMenus()
-	self:AddUpdater("QuickChat_UpdateInGame",callback(self,self,"UpdateGame"))
-end
-
-function QuickChat:CreateMenus()
-	--only create menu objects for radial menus that are bound to at least one key
-	local binding_data = self._bindings
-	if binding_data then
-		for radial_id,button_name in pairs(binding_data) do
-			local button_name_ids = Idstring(button_name)
-			self._input_cache[button_name_ids] = {id = radial_id,state = false,button_name = button_name}
-			if not self._radial_menus[radial_id] then
-				local radial_menu_params = self._radial_menu_params[radial_id]
-				if radial_menu_params then
-					local new_menu = self._radial_menu_manager:NewMenu(radial_menu_params)
-					self._radial_menus[radial_id] = new_menu
-				else
-					self:Log("Error creating menu: " .. tostring(radial_id))
-				end
-			end
-		end
-	end
-end
-
-function QuickChat:ClearInputCache()
-	for button_name_ids,input_data in pairs(self._input_cache) do 
-		local menu = self:GetMenu(input_data.id)
-		if menu then 
-			menu:Hide(false) --do not activate "confirm" callback
-		end
-		self._input_cache[button_name_ids] = nil
-	end
-end
-
-function QuickChat:Log(msg)
-	if Console then
-		Console:Log(msg)
-	end
-end
-
-function QuickChat:GetController()
-	local controller
-	if self:IsGamepadModeEnabled() then 
-		local cm = managers.controller
-		local index = Global.controller_manager.default_wrapper_index or cm:get_preferred_default_wrapper_index()
-		
-		local controller_index = cm._wrapper_to_controller_list[index][1]
-		controller = Input:controller(controller_index)
-		--[[
-		local player_unit = managers.player and managers.player:local_player()
-		local wrapper = managers.system_menu:_get_controller()
-		if alive(player_unit) then 
-			local state = player_unit:movement():current_state()
-			wrapper = state._controller or wrapper
-		end
-		local wrapper_index = wrapper and wrapper._id
---		local controller_index = wrapper_index and managers.controller._wrapper_to_controller_list[wrapper_index]
-		controller = wrapper_index and Input:controller(wrapper_index)
-		--]]
-	else
-		controller = Input:keyboard()
-	end
-	return controller
-end
-
-function QuickChat:Update(source,t,dt)
-	local game_is_paused = source == "GameSetupPausedUpdate"
-	--todo split into separate updater table for efficiency
-	for id,data in pairs(self._updaters) do 
-		if not game_is_paused or data.pause_enabled then
-			data.func(t,dt,game_is_paused)
-		end
-	end
-end
-
-function QuickChat:UpdateGame(t,dt)
-	local controller = self:GetController()
-	if not controller then
-		return
-	end
-	for button_name_ids,input_data in pairs(self._input_cache) do 
-		
-		local menu = self:GetMenu(input_data.id)
-		local state = controller:down(button_name_ids) 
-		
---		_G.Console:SetTracker(string.format("Key down %s,%.1f,",state,t),1)
-		if menu then
-			if state then 
-				if not input_data.state then --and not any_open
---					_G.Console:SetTracker("is active? " .. tostring(self._last_menu and self._last_menu:IsActive()),2)
-					if not (self._last_menu and self._last_menu:IsActive()) then
---						_G.Console:SetTracker(string.format("show %.1f",t),3)
-						menu:Show()
-						self._last_menu = menu
-					end
-				end
-			else
-				if input_data.state then
---					_G.Console:SetTracker(string.format("hide %.1f",t),4)
-					if self:IsGamepadModeEnabled() then 
-						local player_unit = managers.player:local_player()
-						if alive(player_unit) then
-							local camera = player_unit:camera()
-							local fpcamera_unit = camera and camera._camera_unit
-							local fpcamera_base = fpcamera_unit and fpcamera_unit:base()
-							if fpcamera_base then
-								fpcamera_base._last_rot_t = nil
-							end
-						end
-						
-					end
-					menu:Hide(true)
-				end
-			end
-		end
-		
-		input_data.state = state
-	end
-end
-
 function QuickChat:GetMenu(id)
 	return id and self._radial_menus[id]
 end
@@ -519,6 +482,8 @@ function QuickChat:ToggleMenu(id)
 		menu:Toggle()
 	end
 end
+
+--Networking
 
 function QuickChat:RegisterPeerById(peer_id,version)
 	if peer_id then 
@@ -598,6 +563,8 @@ function QuickChat:SendSyncPeerVersionToAll()
 	LuaNetworking:SendToPeers(self.SYNC_MESSAGE_REGISTER,self.API_VERSION)
 end
 
+--Updaters
+
 function QuickChat:AddControllerInputListener()
 	self:AddUpdater("quickchat_update_rebinding",callback(self,self,"UpdateRebindingListener"),true)
 end
@@ -665,6 +632,63 @@ function QuickChat:UpdateRebindingListener(t,dt)
 	end
 end
 
+function QuickChat:Update(source,t,dt)
+	local game_is_paused = source == "GameSetupPausedUpdate"
+	--todo split into separate updater table for efficiency
+	for id,data in pairs(self._updaters) do 
+		if not game_is_paused or data.pause_enabled then
+			data.func(t,dt,game_is_paused)
+		end
+	end
+end
+
+function QuickChat:UpdateGame(t,dt)
+	local controller = self:GetController()
+	if not controller then
+		return
+	end
+	for button_name_ids,input_data in pairs(self._input_cache) do 
+		
+		local menu = self:GetMenu(input_data.id)
+		local state = controller:down(button_name_ids) 
+		
+--		_G.Console:SetTracker(string.format("Key down %s,%.1f,",state,t),1)
+		if menu then
+			if state then 
+				if not input_data.state then --and not any_open
+--					_G.Console:SetTracker("is active? " .. tostring(self._last_menu and self._last_menu:IsActive()),2)
+					if not (self._last_menu and self._last_menu:IsActive()) then
+--						_G.Console:SetTracker(string.format("show %.1f",t),3)
+						menu:Show()
+						self._last_menu = menu
+					end
+				end
+			else
+				if input_data.state then
+--					_G.Console:SetTracker(string.format("hide %.1f",t),4)
+					if self:IsGamepadModeEnabled() then 
+						local player_unit = managers.player:local_player()
+						if alive(player_unit) then
+							local camera = player_unit:camera()
+							local fpcamera_unit = camera and camera._camera_unit
+							local fpcamera_base = fpcamera_unit and fpcamera_unit:base()
+							if fpcamera_base then
+								fpcamera_base._last_rot_t = nil
+							end
+						end
+						
+					end
+					menu:Hide(true)
+				end
+			end
+		end
+		
+		input_data.state = state
+	end
+end
+
+--I/O
+
 function QuickChat:GetBindingsFileName()
 	return string.gsub(self._bindings_name,"$WRAPPER",managers.controller:get_default_wrapper_type())
 end
@@ -694,18 +718,6 @@ function QuickChat:LoadBindings(filename)
 			self._bindings[k] = v
 		end
 	end
-end
-
-function QuickChat:GetRadialIdByKeybind(keyname)
-	for radial_id,_keyname in pairs(self._bindings) do 
-		if _keyname == keyname then
-			return radial_id
-		end
-	end
-end
-
-function QuickChat:GetKeybindByRadialId(radial_id)
-	return radial_id and self._bindings[radial_id]
 end
 
 Hooks:Add("MenuManagerSetupCustomMenus","QuickChat_MenuManagerSetupCustomMenus",function(menu_manager, nodes)
