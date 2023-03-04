@@ -34,7 +34,7 @@ QuickChat = QuickChat or {
 QuickChat._core = QuickChatCore
 QuickChat._mod_path = (QuickChatCore and QuickChatCore.GetPath and QuickChatCore:GetPath()) or ModPath
 QuickChat._save_path = SavePath .. "QuickChat/"
-QuickChat._keyboard_bindings_name = "keyboard_bindings.json"
+QuickChat._bindings_name = "bindings_$WRAPPER.json"
 QuickChat._controller_bindings_name = "controller_bindings.json"
 --vr bindings?
 QuickChat._settings_name = "settings.json"
@@ -93,7 +93,7 @@ QuickChat._input_cache = {}
 
 QuickChat.allowed_binding_buttons = { --wrapper-specific bindings
 	pc = {
-		buttons = { --the index of each these buttons as far as the controller is concerned is generally derived from its position on the keyboard, from left to right, then top to bottom (ie western book-reading order)
+		buttons = { --the index of each these buttons as far as the controller is concerned is generally derived from its position on the keyboard, from left to right, then top to bottom (ie western book-reading order); eg. esc is 1, f1 is 2, f2 is 3, etc.
 			--numbers
 			"1","2","3","4","5","6","7","8","9","0",
 			--letters
@@ -643,32 +643,20 @@ function QuickChat:UpdateRebindingListener(t,dt)
 	end
 end
 
+function QuickChat:GetBindingsFileName()
+	return string.gsub(self._bindings_name,"$WRAPPER",managers.controller:get_default_wrapper_type())
+end
+
 function QuickChat:LoadSettings()
-	if managers.controller:get_default_wrapper_type() == "pc" then
-		self:LoadKeyboardBindings()
-	else
-		self:LoadControllerBindings()
-	end
+	self:LoadBindings(self:GetBindingsFileName())
 end
 
 function QuickChat:SaveSettings()
-	if managers.controller:get_default_wrapper_type() == "pc" then
-		self:SaveKeyboardBindings()
-	else
-		self:SaveControllerBindings()
-	end
+	self:SaveBindings(self:GetBindingsFileName())
 end
 
-function QuickChat:SaveControllerBindings()
-	local save_path = self._save_path .. self._controller_bindings_name
-	local file = io.open(save_path,"w+")
-	if file then
-		file:write(json.encode(self._bindings))
-		file:close()
-	end
-end
-function QuickChat:SaveKeyboardBindings()
-	local save_path = self._save_path .. self._keyboard_bindings_name
+function QuickChat:SaveBindings(filename)
+	local save_path = self._save_path .. tostring(filename)
 	local file = io.open(save_path,"w+")
 	if file then
 		file:write(json.encode(self._bindings))
@@ -676,26 +664,13 @@ function QuickChat:SaveKeyboardBindings()
 	end
 end
 
-function QuickChat:LoadControllerBindings()
-	local save_path = self._save_path .. self._controller_bindings_name
+function QuickChat:LoadBindings(filename)
+	local save_path = self._save_path .. tostring(filename)
 	local file = io.open(save_path, "r")
 	if file then
 		for k, v in pairs(json.decode(file:read("*all"))) do
 			self._bindings[k] = v
 		end
-	else
-		self:SaveControllerBindings()
-	end
-end
-function QuickChat:LoadKeyboardBindings()
-	local save_path = self._save_path .. self._keyboard_bindings_name
-	local file = io.open(save_path, "r")
-	if file then
-		for k, v in pairs(json.decode(file:read("*all"))) do
-			self._bindings[k] = v
-		end
-	else
-		self:SaveSettings()
 	end
 end
 
