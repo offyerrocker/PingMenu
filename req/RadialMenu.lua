@@ -2,6 +2,7 @@
 
 --[[
 	TODO
+implement deadzone
 straighten highlight/selected/active item terminology
 recreate with items
 	--object:config
