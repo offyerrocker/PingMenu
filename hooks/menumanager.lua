@@ -169,10 +169,7 @@ QuickChat.allowed_binding_buttons = { --wrapper-specific bindings
 QuickChat.allowed_binding_buttons.ps4 = QuickChat.allowed_binding_buttons.ps3
 QuickChat.allowed_binding_buttons.xb1 = QuickChat.allowed_binding_buttons.xbox360
 
-QuickChat._allowed_binding_buttons = {
-	keyboard = {},
-	virtualcontroller = {}
-}
+QuickChat._allowed_binding_buttons = {}
 
 --load dependencies/classes
 do --load RadialMenu
@@ -203,6 +200,11 @@ function QuickChat:Log(msg)
 end
 
 --Setup
+
+function QuickChat:Setup() --on game setup complete
+	self:PopulateInputCache()
+	self:AddUpdater("QuickChat_UpdateInGame",callback(self,self,"UpdateGame"),false)
+end
 
 function QuickChat:LoadCustomRadials()
 	if self._lip then
@@ -271,13 +273,18 @@ function QuickChat:LoadCustomRadials()
 	end
 end
 
-function QuickChat:Setup()
-	self:CreateMenus()
-	self:AddUpdater("QuickChat_UpdateInGame",callback(self,self,"UpdateGame"))
+function QuickChat:ClearInputCache()
+	for button_name_ids,input_data in pairs(self._input_cache) do 
+		local menu = self:GetMenu(input_data.id)
+		if menu then 
+			menu:Hide(false) --do not activate "confirm" callback
+		end
+		self._input_cache[button_name_ids] = nil
+	end
 end
 
-function QuickChat:CreateMenus()
-	--only create menu objects for radial menus that are bound to at least one key
+function QuickChat:PopulateInputCache() --for each radial menu that is bound to a button, create a menu if it does not already exist
+	--then register it in the input cache so that the button state can be checked each frame
 	local binding_data = self._bindings
 	if binding_data then
 		for radial_id,button_name in pairs(binding_data) do
@@ -293,16 +300,6 @@ function QuickChat:CreateMenus()
 				end
 			end
 		end
-	end
-end
-
-function QuickChat:ClearInputCache()
-	for button_name_ids,input_data in pairs(self._input_cache) do 
-		local menu = self:GetMenu(input_data.id)
-		if menu then 
-			menu:Hide(false) --do not activate "confirm" callback
-		end
-		self._input_cache[button_name_ids] = nil
 	end
 end
 
@@ -331,11 +328,11 @@ function QuickChat:UnpackGamepadBindings()
 		local allowed_wrapper_buttons = allowed_wrapper_bindings.buttons
 		if wrapper_type == "pc" then 
 			for _,wrapperbutton in pairs(allowed_wrapper_buttons) do
-				QuickChat._allowed_binding_buttons.keyboard[Idstring(wrapperbutton):key()] = wrapperbutton
+				QuickChat._allowed_binding_buttons[Idstring(wrapperbutton):key()] = wrapperbutton
 			end
 		else
 			for wrapperbutton,virtualbutton in pairs(allowed_wrapper_buttons) do
-				QuickChat._allowed_binding_buttons.virtualcontroller[Idstring(virtualbutton):key()] = virtualbutton
+				QuickChat._allowed_binding_buttons[Idstring(virtualbutton):key()] = virtualbutton
 																		--must be wrapperbutton for menu bind detection
 																		--must be virtualbuttonn for ingame bind detection
 			end
@@ -573,23 +570,6 @@ function QuickChat:RemoveControllerInputListener()
 	self:RemoveUpdater("quickchat_update_rebinding")
 end
 
-function QuickChat:AddUpdater(id,func,run_while_paused)
-	local f_type = type(func)
-	if f_type == "function" then
-		self._updaters[id] = {
-			id = id,
-			func = func,
-			pause_enabled = run_while_paused
-		}
-	else
-		self:Log("ERROR: Bad updater type for " .. tostring(id) .. ": " .. f_type .. " (expected function)")
-	end
-end
-
-function QuickChat:RemoveUpdater(id)
-	self._updaters[id] = nil
-end
-
 function QuickChat:UpdateRebindingListener(t,dt)
 	--options: --pressed_list --released_list --down_list 
 	local controller = self:GetController()
@@ -602,8 +582,8 @@ function QuickChat:UpdateRebindingListener(t,dt)
 				local button_ids_key = button_ids:key()
 				
 				if gamepad_mode_enabled then 
-					if self._allowed_binding_buttons.virtualcontroller[button_ids_key] then
-						local button_name = self._allowed_binding_buttons.virtualcontroller[button_ids_key]
+					if self._allowed_binding_buttons[button_ids_key] then
+						local button_name = self._allowed_binding_buttons[button_ids_key]
 						--associate that menu with this button
 --						self:Log("detected controller " .. button_name)
 						if self._callback_bind_button then
@@ -614,7 +594,7 @@ function QuickChat:UpdateRebindingListener(t,dt)
 					end
 				else
 					if self._allowed_binding_buttons.keyboard[button_ids_key] then
-						local button_name = self._allowed_binding_buttons.keyboard[button_ids_key]
+						local button_name = self._allowed_binding_buttons[button_ids_key]
 						--associate that menu with this button
 --						self:Log("detected keyboard " .. button_name)
 						if self._callback_bind_button then
@@ -630,6 +610,23 @@ function QuickChat:UpdateRebindingListener(t,dt)
 		end
 		
 	end
+end
+
+function QuickChat:AddUpdater(id,func,run_while_paused)
+	local f_type = type(func)
+	if f_type == "function" then
+		self._updaters[id] = {
+			id = id,
+			func = func,
+			pause_enabled = run_while_paused
+		}
+	else
+		self:Log("ERROR: Bad updater type for " .. tostring(id) .. ": " .. f_type .. " (expected function)")
+	end
+end
+
+function QuickChat:RemoveUpdater(id)
+	self._updaters[id] = nil
 end
 
 function QuickChat:Update(source,t,dt)
@@ -892,7 +889,7 @@ Hooks:Add("MenuManagerPopulateCustomMenus","QuickChat_MenuManagerPopulateCustomM
 						true
 					)
 					self:ClearInputCache()
-					self:CreateMenus()
+					self:PopulateInputCache()
 					refresh_menu_item(quickchat_main_menu_id,item_priority,managers.localization:text("qc_bind_status_title",{KEYNAME=utf8.to_upper(button_name)}))
 				end
 				
