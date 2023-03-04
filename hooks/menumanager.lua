@@ -174,6 +174,28 @@ QuickChat._allowed_binding_buttons = {
 	virtualcontroller = {}
 }
 
+--load dependencies/classes
+do --load RadialMenu
+	local f,e = blt.vm.loadfile(QuickChat._mod_path .. "req/RadialMenu.lua")
+	if f then 
+		QuickChat._radial_menu_manager = f()
+		log("[QuickChat] RadialMenu loaded successfully.")
+	else
+		log("[QuickChat] Error loading RadialMenu.lua:")
+		log(e)
+	end
+end
+do --load Lua ini Parser
+	local f,e = blt.vm.loadfile(QuickChat._mod_path .. "req/LIP.lua")
+	if f then 
+		QuickChat._lip = f()
+		log("[QuickChat] LIP loaded successfully.")
+	else
+		log("[QuickChat] Error loading LIP.lua:")
+		log(e)
+	end
+end
+
 function QuickChat:IsGamepadModeEnabled()
 	return managers.controller and managers.controller:get_default_wrapper_type() ~= "pc"
 end
@@ -674,27 +696,6 @@ function QuickChat:LoadBindings(filename)
 	end
 end
 
-do --load RadialMenu
-	local f,e = blt.vm.loadfile(QuickChat._mod_path .. "req/RadialMenu.lua")
-	if f then 
-		QuickChat._radial_menu_manager = f()
-		log("[QuickChat] RadialMenu loaded successfully.")
-	else
-		log("[QuickChat] Error loading RadialMenu.lua:")
-		log(e)
-	end
-end
-do --load Lua ini Parser
-	local f,e = blt.vm.loadfile(QuickChat._mod_path .. "req/LIP.lua")
-	if f then 
-		QuickChat._lip = f()
-		log("[QuickChat] LIP loaded successfully.")
-	else
-		log("[QuickChat] Error loading LIP.lua:")
-		log(e)
-	end
-end
-
 function QuickChat:GetRadialIdByKeybind(keyname)
 	for radial_id,_keyname in pairs(self._bindings) do 
 		if _keyname == keyname then
@@ -967,7 +968,6 @@ Hooks:Add("BaseNetworkSessionOnLoadComplete","QuickChat_OnLoaded",callback(Quick
 Hooks:Add("GameSetupUpdate","QuickChat_GameUpdate",callback(QuickChat,QuickChat,"Update","GameSetupUpdate"))
 Hooks:Add("GameSetupPausedUpdate","QuickChat_GamePausedUpdate",callback(QuickChat,QuickChat,"Update","GameSetupPausedUpdate"))
 Hooks:Add("MenuUpdate","QuickChat_MenuUpdate",callback(QuickChat,QuickChat,"Update","MenuUpdate"))
-
 
 --[[
 --input button name reference
