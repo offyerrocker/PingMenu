@@ -1,9 +1,7 @@
 --TODO
 	--SCHEMA
-		--inconsistency in gamepad mapping
-			--gamepads use the gamepad-specific name
-			--wrappers/binding detection use the generic name (action name)
-		--todo use _supported_controller_type_map instead of manual mapping
+		--todo use _supported_controller_type_map instead of manual mapping?
+			--may not be necessary if only the wrapper type is used
 		--todo: in networksession hooks, send only to synced player?
 		--make saves/QuickChat/layout/ directory
 		--needs third avenue for VR with kb/virtualcontroller
@@ -20,8 +18,7 @@
 			--(this allows controllers to bind or reserve any options they desire, without interfering with menu operation)
 
 	--BUGS
-		--[STALE] sometimes virtualcontroller input checking just breaks for no reason!
-
+		--squish, squash, no bugs here
 
 
 
@@ -86,7 +83,7 @@ QuickChat._preset_callbacks = {
 QuickChat._radial_menus = {} --generated radial menus
 QuickChat._radial_menu_params = {} --ungenerated radial menus; populated with user data
 
-QuickChat._callback_bind_button = nil
+QuickChat._callback_bind_button = nil --dynamically set
 QuickChat._updaters = {}
 	
 QuickChat._input_cache = {}
@@ -326,17 +323,12 @@ function QuickChat:UnpackGamepadBindings()
 	local allowed_wrapper_bindings = self.allowed_binding_buttons[wrapper_type]
 	if allowed_wrapper_bindings then 
 		local allowed_wrapper_buttons = allowed_wrapper_bindings.buttons
-		if wrapper_type == "pc" then 
-			for _,wrapperbutton in pairs(allowed_wrapper_buttons) do
-				QuickChat._allowed_binding_buttons[Idstring(wrapperbutton):key()] = wrapperbutton
-			end
-		else
-			for wrapperbutton,virtualbutton in pairs(allowed_wrapper_buttons) do
-				QuickChat._allowed_binding_buttons[Idstring(virtualbutton):key()] = virtualbutton
-																		--must be wrapperbutton for menu bind detection
-																		--must be virtualbuttonn for ingame bind detection
-			end
+		for _,wrapperbutton in pairs(allowed_wrapper_buttons) do
+			QuickChat._allowed_binding_buttons[Idstring(wrapperbutton):key()] = wrapperbutton
 		end
+--		if wrapper_type == "pc" then 
+			--todo load mouse buttons here
+--		end
 	end
 end
 
@@ -504,8 +496,7 @@ function QuickChat:SendPresetMessage(preset_text)
 		if network_mgr then
 			local session = network_mgr:session()
 			if session then 
-				local local_peer_id = session:local_peer():id()
-				local local_peer_color = tweak_data.chat_colors[local_peer_id]
+				local local_peer = session:local_peer()
 				local username = network_mgr.account:username()
 				local text_localized = managers.localization:text(self._message_presets[preset_text])
 				for _,peer in pairs(session:peers()) do 
@@ -519,7 +510,7 @@ function QuickChat:SendPresetMessage(preset_text)
 						end
 					end
 				end
-				managers.chat:_receive_message(ChatManager.GAME,username,text_localized,local_peer_color)
+				managers.chat:receive_message_by_peer(ChatManager.GAME,local_peer,text_localized)
 			end
 		end
 	end
@@ -551,7 +542,6 @@ function QuickChat:SendChatToAll(msg)
 		local peer_id = session:local_peer():id()
 		local col = tweak_data.chat_colors[peer_id]
 		local username = managers.network.account:username()
---		managers.chat:_receive_message(ChatManager.GAME,username,msg,col)
 		managers.chat:send_message(ChatManager.GAME,username,msg)
 	end
 end
