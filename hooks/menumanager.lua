@@ -323,8 +323,8 @@ function QuickChat:UnpackGamepadBindings()
 	local allowed_wrapper_bindings = self.allowed_binding_buttons[wrapper_type]
 	if allowed_wrapper_bindings then 
 		local allowed_wrapper_buttons = allowed_wrapper_bindings.buttons
-		for _,wrapperbutton in pairs(allowed_wrapper_buttons) do
-			QuickChat._allowed_binding_buttons[Idstring(wrapperbutton):key()] = wrapperbutton
+		for controllerbutton,wrapperbutton in pairs(allowed_wrapper_buttons) do
+			QuickChat._allowed_binding_buttons[Idstring(controllerbutton):key()] = controllerbutton
 		end
 --		if wrapper_type == "pc" then 
 			--todo load mouse buttons here
@@ -595,10 +595,13 @@ function QuickChat:UpdateRebindingListener(t,dt)
 					end
 				end
 			end
-		elseif not gamepad_mode_enabled then
-			--check mouse input
 		end
+	end
+	
+	if not gamepad_mode_enabled then
+--		local mouse = Input:mouse()
 		
+		--check mouse input (different controller)
 	end
 end
 
