@@ -16,10 +16,23 @@
 		--localize menu button names for controllers, per gamepad type
 		--allow selecting button by waiting at menu (for controllers) for x seconds
 			--(this allows controllers to bind or reserve any options they desire, without interfering with menu operation)
-
+		
+		--PING MENU design notes
+			--no text, with the following exceptions:
+				--timers
+				--auto-generated text (automatically determined ping targets)
+			--two variants with separate keybinds
+				--temp markers
+					--disappears on a timer
+				--permanent markers
+					--stays until removed
+				
+			--button/keybind to remove all markers
+				--remove all marker data AND all panel children
+				
+		
 	--BUGS
-		--squish, squash, no bugs here
-
+		--the dreaded input bug is back for keyboards in-game; no input detected in binding menu
 
 
 
@@ -571,28 +584,17 @@ function QuickChat:UpdateRebindingListener(t,dt)
 				local button_ids = controller:button_name(button_index)
 				local button_ids_key = button_ids:key()
 				
-				if gamepad_mode_enabled then 
-					if self._allowed_binding_buttons[button_ids_key] then
-						local button_name = self._allowed_binding_buttons[button_ids_key]
-						--associate that menu with this button
+				if self._allowed_binding_buttons[button_ids_key] then
 --						self:Log("detected controller " .. button_name)
-						if self._callback_bind_button then
-							self:_callback_bind_button(button_name)
-						end
-						self:RemoveControllerInputListener()
-						break
+--						if gamepad_mode_enabled then 
+--						end
+					local button_name = self._allowed_binding_buttons[button_ids_key]
+					--associate that menu with this button
+					if self._callback_bind_button then
+						self:_callback_bind_button(button_name)
 					end
-				else
-					if self._allowed_binding_buttons.keyboard[button_ids_key] then
-						local button_name = self._allowed_binding_buttons[button_ids_key]
-						--associate that menu with this button
---						self:Log("detected keyboard " .. button_name)
-						if self._callback_bind_button then
-							self:_callback_bind_button(button_name)
-						end
-						self:RemoveControllerInputListener()
-						break
-					end
+					self:RemoveControllerInputListener()
+					break
 				end
 			end
 		end
@@ -811,8 +813,8 @@ Hooks:Add("MenuManagerPopulateCustomMenus","QuickChat_MenuManagerPopulateCustomM
 					},
 					{
 						text = managers.localization:text("qc_menu_dialog_cancel"),
-						is_default_button = true,
 						is_cancel_button = true,
+						is_default_button = true,
 						callback = function()
 							QuickChat:RemoveControllerInputListener()
 						end
@@ -845,7 +847,6 @@ Hooks:Add("MenuManagerPopulateCustomMenus","QuickChat_MenuManagerPopulateCustomM
 					end
 					self._bindings[radial_id] = nil
 					refresh_menu_item(quickchat_main_menu_id,item_priority,unbound_text)
-					return
 				elseif button_name == button_cancel_name then
 					--cancel, do nothing
 					return
@@ -893,45 +894,13 @@ Hooks:Add("MenuManagerPopulateCustomMenus","QuickChat_MenuManagerPopulateCustomM
 			QuickChat:AddControllerInputListener()
 		end
 	end
-	
---[[
-	MenuHelper:AddButton({
-		id = "qc_open_bind_menu",
-		title = "qc_open_bind_menu_title",
-		desc = "qc_open_bind_menu_desc",
-		callback = "callback_qc_button_open_bind_menu",
-		menu_id = "quickchat_menu_main",
-		priority = 2
-	})
-	
-	MenuCallbackHandler.callback_qc_button_open_bind_menu = function(self)
-		QuickChat._quickmenu_item = QuickMenu:new("hello","description here!",{
-			{
-				text = "k",
-				is_cancel_button = true
-			}
-		},true)
-		QuickChat:AddControllerInputListener()
-	end
-	
-	MenuHelper:AddButton({
-		id = "ach_hitmarkers_hit_set_headshot_color",
-		title = "menu_ach_hitmarkers_hit_set_headshot_color_title",
-		desc = "menu_ach_hitmarkers_hit_set_headshot_color_desc",
-		callback = "callback_ach_hitmarkers_hit_set_headshot_color",
-		menu_id = AdvancedCrosshair.hitmarkers_menu_id,
-		disabled = true,
-		priority = 1
-	})
-	
-	--]]
 end)
 
 Hooks:Add("MenuManagerBuildCustomMenus","QuickChat_MenuManagerBuildCustomMenus",function(menu_manager, nodes)
 		nodes.quickchat_menu_main = MenuHelper:BuildMenu(
 		"quickchat_menu_main",{
 			area_bg = "none",
-			back_callback = nil,
+			back_callback = "callback_menu_quickchat_back",
 			focus_changed_callback = nil
 		}
 	)
@@ -940,6 +909,10 @@ Hooks:Add("MenuManagerBuildCustomMenus","QuickChat_MenuManagerBuildCustomMenus",
 end)
 
 Hooks:Add("MenuManagerInitialize","QuickChat_MenuManagerInitialize",function(menu_manager)
+	MenuCallbackHandler.callback_menu_quickchat_back = function()
+		QuickChat:ClearInputCache()
+		QuickChat:PopulateInputCache()
+	end
 --	QuickChat:Setup()
 end) 
 
