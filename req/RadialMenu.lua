@@ -2,10 +2,7 @@
 
 --[[
 	TODO
-implement deadzone
 straighten highlight/selected/active item terminology
-recreate with items
-	--object:config
 streamline wrapper class
 
 --allow repositioning text (currently centered from formula: [0.5*radius  +  constant] )
@@ -20,8 +17,11 @@ streamline wrapper class
 
 core:module("SystemMenuManager")
 require("lib/managers/dialogs/Dialog")
+--also requires Hooks library from BLT
 
 local RadialMenuDialog = class(Dialog)
+
+
 
 local RadialMenuObject = class()
 
@@ -32,7 +32,6 @@ local RadialMenuManager = {
 	log_to_console = true,
 	log_to_blt = true,
 	log_to_beardlib = false
-	
 }
 --RadialMenuManager.radial_menu_objects = {}
 
@@ -118,14 +117,13 @@ function RadialMenuObject:setup(params) --create new instance of a radial select
 		self:Log(string.format("ERROR: Missing id parameter! Please refer to the wiki: %s",self._radial_menu_manager._WIKI_URL))
 	end
 	self._id = id
-	
 	self:CreateDialog({
 		id = id,
 		parent = self,
 		class_panel = class_panel,
 		items = params.items,
 		size = params.size or 256, --size of radial, NOT the size of the parent panel
-		deadzone = params.deadzone, --minimum distance from center the mouse must be in order to select an item (not implemented)
+		deadzone = params.deadzone, --minimum distance from center the mouse must be in order to select an item
 		font = params.font,
 		font_size = params.font_size,
 		item_margin = params.item_margin,
@@ -140,8 +138,8 @@ function RadialMenuObject:setup(params) --create new instance of a radial select
 		mouseover_text_visible = params.mouseover_text_visible and true or false,
 		item_text_visible = params.item_text_visible and true or false,
 		reset_mouse_position_on_show = params.reset_mouse_position_on_show and true or false,
-		title = "",
-		text = ""
+		title = "", --not used
+		text = "" --not used
 	})
 end
 
@@ -410,6 +408,10 @@ function RadialMenuDialog:recreate_gui()
 	
 end
 
+function RadialMenuDialog:check_select_item(x,y)
+	
+end
+
 function RadialMenuDialog:update(t,dt)
 	self:update_input(t,dt)
 end
@@ -431,9 +433,13 @@ function RadialMenuDialog:update_input(t,dt)
 					local y = move.y
 --					_G.Console:SetTracker(string.format("%0.2f, %0.2f | %0.1fs",move.x,move.y,t),1)
 					
-					local new_selected_index
+					local new_selected_index = nil
 					
 					if x ~= 0 or y ~= 0 then
+						--no need to check for deadzones on controllers
+						--since they use directional (stick vector) input instead of absolute (mouse position)
+						--they effectively have deadzones built in
+						
 						local c_x,c_y = panel:center()
 						local m_x,m_y = x - c_x,y - c_y
 						local angle = 90 - math.atan(y/x) --0/0 returns nan, but 1/0 works as intended
@@ -441,7 +447,6 @@ function RadialMenuDialog:update_input(t,dt)
 							angle = angle + 180
 						end
 						angle = angle % 360
-						
 						cursor:set_rotation(angle)
 						cursor:set_center(c_x,c_y)
 						
@@ -451,7 +456,6 @@ function RadialMenuDialog:update_input(t,dt)
 						new_selected_index = 1 + ((math.round((angle - angle_interval) / angle_interval) + 1) % num_items)
 	--					_G.Console:SetTracker(string.format("selected: %i",new_selected_index),2)
 	--					_G.Console:SetTracker(string.format("angle: %i",angle),3)
-						
 					end
 					
 					local selected_index = self:get_selected_index()
@@ -460,6 +464,7 @@ function RadialMenuDialog:update_input(t,dt)
 						self:on_mouseover_item(new_selected_index,selected_index)
 					end
 				end
+				
 			end
 		else
 			--skip the first frame of input
@@ -552,26 +557,41 @@ function RadialMenuDialog:callback_mouse_moved(o,x,y)
 		local cursor = self._panel:child("cursor")
 		local c_x,c_y = self._panel:center()
 		local m_x,m_y = x - c_x,y - c_y
-		local angle = math.atan(m_y/m_x) + 90
-		if m_x < 0 then
-			angle = angle + 180
+		local new_selected_index = nil
+		
+		local deadzoned = false
+		if self._data.deadzone then
+			local distance = math.sqrt(m_x * m_x + m_y * m_y)
+			deadzoned = distance < self._data.deadzone
 		end
-		angle = angle % 360
 		
-		cursor:set_rotation(angle)
-		cursor:set_center(c_x,c_y)
-		local num_items = #self._items
+		if not deadzoned then
+			
+			local angle = math.atan(m_y/m_x) + 90
+			if m_x < 0 then
+				angle = angle + 180
+			end
+			angle = angle % 360
+			
+			cursor:set_rotation(angle)
+			cursor:set_center(c_x,c_y)
+			local num_items = #self._items
+			
+			local angle_interval = 360 / num_items
+			new_selected_index = 1 + ((math.round((angle - angle_interval) / angle_interval) + 1) % num_items)
+	--		_G.Console:SetTracker(string.format("angle: %i",angle),3)
+	--		_G.Console:SetTracker(string.format("selected: %i",new_selected_index),2)
+	--		_G.managers.mouse_pointer:set_pointer_image("arrow")
+			cursor:show()
+		else
+			cursor:hide()
+		end
 		
-		local angle_interval = 360 / num_items
-		local new_selected_index = 1 + ((math.round((angle - angle_interval) / angle_interval) + 1) % num_items)
---		_G.Console:SetTracker(string.format("angle: %i",angle),3)
---		_G.Console:SetTracker(string.format("selected: %i",new_selected_index),2)
 		local selected_index = self:get_selected_index()
 		if selected_index ~= new_selected_index then
 			self:set_selected_index(new_selected_index)
 			self:on_mouseover_item(new_selected_index,selected_index)
 		end
---		_G.managers.mouse_pointer:set_pointer_image("arrow")
 	end
 --	log("moved " .. tostring(x) .. " " .. tostring(y))
 end

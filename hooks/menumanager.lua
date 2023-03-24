@@ -29,13 +29,9 @@
 				
 			--button/keybind to remove all markers
 				--remove all marker data AND all panel children
-				
-		
+	
 	--BUGS
 		--the dreaded input bug is back for keyboards in-game; no input detected in binding menu
-
-
-
 
 QuickChat = QuickChat or {
 	_radial_menu_manager = nil, --for reference
@@ -293,7 +289,7 @@ function QuickChat:ClearInputCache()
 	end
 end
 
-function QuickChat:PopulateInputCache() --for each radial menu that is bound to a button, create a menu if it does not already exist
+function QuickChat:PopulateInputCache()--for each radial menu that is bound to a button, create a menu if it does not already exist
 	--then register it in the input cache so that the button state can be checked each frame
 	local binding_data = self._bindings
 	if binding_data then
@@ -745,7 +741,11 @@ Hooks:Add("MenuManagerPopulateCustomMenus","QuickChat_MenuManagerPopulateCustomM
 	end
 	
 	for i,radial_id in ipairs(radial_keys) do 
-		local current_button = QuickChat:GetKeybindByRadialId(radial_id) or unbound_text
+		local current_binding_text = unbound_text
+		local current_button = QuickChat:GetKeybindByRadialId(radial_id)
+		if current_button then
+			current_binding_text = managers.localization:text("qc_bind_status_title",{KEYNAME=utf8.to_upper(current_button)})
+		end
 --		local menu_id = string.format("quickchat_radial_menu_%i",i)
 --		local new_menu = MenuHelper:NewMenu(menu_id)
 		local j = i - 1
@@ -770,7 +770,7 @@ Hooks:Add("MenuManagerPopulateCustomMenus","QuickChat_MenuManagerPopulateCustomM
 		})
 		MenuHelper:AddButton({
 			id = item_id,
-			title = managers.localization:text("qc_bind_status_title",{KEYNAME=utf8.to_upper(current_button)}),
+			title = current_binding_text,
 			desc = managers.localization:text("qc_bind_status_desc"),
 			localized = false,
 			callback = callback_id,
