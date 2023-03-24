@@ -40,8 +40,8 @@ QuickChat = QuickChat or {
 QuickChat._core = QuickChatCore
 QuickChat._mod_path = (QuickChatCore and QuickChatCore.GetPath and QuickChatCore:GetPath()) or ModPath
 QuickChat._save_path = SavePath .. "QuickChat/"
+QuickChat._save_layouts_path = QuickChat._save_path .. "layouts/"
 QuickChat._bindings_name = "bindings_$WRAPPER.json"
-QuickChat._controller_bindings_name = "controller_bindings.json"
 --vr bindings?
 QuickChat._settings_name = "settings.json"
 QuickChat.default_settings = {}
@@ -214,15 +214,17 @@ function QuickChat:Setup() --on game setup complete
 end
 
 function QuickChat:LoadCustomRadials()
+	local file_util = _G.file
 	if self._lip then
-		local directory_exists = file.DirectoryExists
-		local file_exists = file.FileExists
+		local directory_exists = file_util.DirectoryExists
+		local file_exists = file_util.FileExists
 		local function get_files(path)
 			if SystemFS and SystemFS.list then 
 				return SystemFS:list(path)
 			else
-				return file.GetFiles(path)
+				return file_util.GetFiles(path)
 			end
+			--this should be alphabetized
 		end
 		local function make_dir(path)
 			if SystemFS and SystemFS.make_dir then
@@ -239,13 +241,13 @@ function QuickChat:LoadCustomRadials()
 		end
 		
 		--load default layouts (built-in) first
-		local layout_path = self._mod_path .. "layouts/"
-		local files = get_files(layout_path)
+		local default_layouts_path = self._mod_path .. "layouts/"
+		local files = get_files(default_layouts_path)
 		for _,filename in pairs(files) do 
 			local ext = string.sub(filename,-4)
 			if ext == ".ini" then
 				--check if get_files is alphabetized
-				local ini_data = self._lip.load(layout_path .. filename)
+				local ini_data = self._lip.load(default_layouts_path .. filename)
 				local radial_id,new_radial_data = self:LoadMenuFromIni(ini_data)
 				if new_radial_data then
 					radial_id = radial_id or string.sub(filename,1,-5)
@@ -255,28 +257,23 @@ function QuickChat:LoadCustomRadials()
 		end
 		
 		--load custom layouts last so that they can overwrite existing defaults
-		local save_path = self._save_path
-		if not directory_exists(save_path) then 
-			make_dir(save_path)
-		end
-		if directory_exists(save_path) then
-			local files = get_files(save_path)
-			for _,filename in pairs(files) do 
-				local ext = string.sub(filename,-4)
-				if ext == ".ini" then
-					--check if get_files is alphabetized
-					local ini_data = self._lip.load(save_path .. filename)
-					local radial_id,new_radial_data = self:LoadMenuFromIni(ini_data)
-					if new_radial_data then
-						radial_id = radial_id or string.sub(filename,1,-5)
-						self._radial_menu_params[radial_id] = new_radial_data
-					end
-				end
-			end
-		else
-			--unable to make dir
+		local custom_layouts_path = self._save_layouts_path
+		if not directory_exists(custom_layouts_path) then 
+			make_dir(custom_layouts_path)
 		end
 		
+		local files = get_files(custom_layouts_path)
+		for _,filename in pairs(files) do 
+			local ext = string.sub(filename,-4)
+			if ext == ".ini" then
+				local ini_data = self._lip.load(custom_layouts_path .. filename)
+				local radial_id,new_radial_data = self:LoadMenuFromIni(ini_data)
+				if new_radial_data then
+					radial_id = radial_id or string.sub(filename,1,-5)
+					self._radial_menu_params[radial_id] = new_radial_data
+				end
+			end
+		end
 	end
 end
 
@@ -394,7 +391,6 @@ function QuickChat:LoadMenuFromIni(ini_data) --converts and validates saved data
 			"font",
 			"font_size"
 		}
-		
 		
 		local body = ini_data.RadialMenu
 		local id = body.id
@@ -920,14 +916,6 @@ Hooks:Add("MenuManagerInitialize","QuickChat_MenuManagerInitialize",function(men
 		QuickChat:PopulateInputCache()
 	end
 --	QuickChat:Setup()
-end) 
-
-Hooks:Register("QuickChat_LoadCustomRadials")
-Hooks:Add("QuickChat_LoadCustomRadials","QuickChat_OnLoadCustomRadials",function(data) --not fully implemented
-	local radial_id,new_radial_data = self:LoadMenuFromIni(data)
-	if new_radial_data then
-		self._radial_menu_params[radial_id] = new_radial_data
-	end
 end)
 
 Hooks:Add("LocalizationManagerPostInit","QuickChat_LocalizationManagerPostInit",function(loc)
