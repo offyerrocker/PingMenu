@@ -1,9 +1,9 @@
 {
 	"name" : "QuickChat",
-	"description" : "Use a radial menu like Left 4 Dead to quickly send chat messages.",
+	"description" : "Use a radial menu like Left 4 Dead to quickly send chat messages.\nController-compatible.",
 	"author" : "Offyerrocker",
 	"contact" : "Discord: Offyerrocker#3878",
-	"version" : "0.0.1",
+	"version" : "1.0.0",
 	"blt_version" : 2,
 	"color" : "255 255 255",
 	"hooks" : [

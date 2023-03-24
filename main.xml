@@ -1,14 +1,13 @@
 <mod name="QuickChat" author="Offyerrocker" color="Color(0,0,1)">
-<!--
-	<AssetUpdates id="28014" version="0.0.1" provider="modworkshop" install_directory = "mods/" version_is_number="false" core_class="QuickChatCore"/>
--->
-	<AddFiles directory="assets">
+	<AssetUpdates name="qc_assetupdates" id="28014" version="1.0.0" provider="modworkshop" install_directory = "mods/" version_is_number="false" core_class="QuickChatCore"/>
+
+	<AddFiles name="qc_addfiles" directory="assets">
 		<texture path="guis/textures/radial_menu/cursor"/>
 		<texture path="guis/textures/radial_menu/darklight"/>
 		<texture path="guis/textures/radial_menu/highlight"/>
 	</AddFiles>
 
-	<Localization directory="loc" default="english.json">
+	<Localization name="qc_localization" directory="loc" default="english.json">
 		<loc file="english.json" language="english" />
 	</Localization>
 </mod>
