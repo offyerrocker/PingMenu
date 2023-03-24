@@ -31,7 +31,7 @@
 				--remove all marker data AND all panel children
 	
 	--BUGS
-		--the dreaded input bug is back for keyboards in-game; no input detected in binding menu
+		--squish squash, no bugs here, only crimson flowers
 
 QuickChat = QuickChat or {
 	_radial_menu_manager = nil, --for reference
@@ -99,6 +99,7 @@ QuickChat._input_cache = {}
 
 QuickChat.allowed_binding_buttons = { --wrapper-specific bindings
 	pc = {
+		--potential buttons map is stored differently for keyboard, but should be unpacked into broadly the same format
 		buttons = { --the index of each these buttons as far as the controller is concerned is generally derived from its position on the keyboard, from left to right, then top to bottom (ie western book-reading order); eg. esc is 1, f1 is 2, f2 is 3, etc.
 			--numbers
 			"1","2","3","4","5","6","7","8","9","0",
@@ -332,12 +333,17 @@ function QuickChat:UnpackGamepadBindings()
 	local allowed_wrapper_bindings = self.allowed_binding_buttons[wrapper_type]
 	if allowed_wrapper_bindings then 
 		local allowed_wrapper_buttons = allowed_wrapper_bindings.buttons
-		for controllerbutton,wrapperbutton in pairs(allowed_wrapper_buttons) do
-			QuickChat._allowed_binding_buttons[Idstring(controllerbutton):key()] = controllerbutton
-		end
---		if wrapper_type == "pc" then 
+		
+		if wrapper_type == "pc" then 
+			for button_index,controllerbutton in ipairs(allowed_wrapper_buttons) do
+				QuickChat._allowed_binding_buttons[Idstring(controllerbutton):key()] = controllerbutton
+			end
 			--todo load mouse buttons here
---		end
+		else
+			for controllerbutton,wrapperbutton in pairs(allowed_wrapper_buttons) do
+				QuickChat._allowed_binding_buttons[Idstring(controllerbutton):key()] = controllerbutton
+			end
+		end
 	end
 end
 
