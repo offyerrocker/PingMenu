@@ -5,7 +5,6 @@
 		--needs VR support
 
 	--FEATURES
-		--fadeout angle
 		--allow mouse button binding for keyboard users
 		--display current gamepad mode in menu
 		--customization
@@ -15,10 +14,10 @@
 		--localize menu button names for controllers, per gamepad type
 		--allow selecting button by waiting at menu (for controllers) for x seconds
 			--(this allows controllers to bind or reserve any options they desire, without interfering with menu operation)
-
 		
 			--button/keybind to remove all waypoints
 				--remove all waypoints data AND all panel children
+			--look-at waypoint and press button to remove
 	
 	--BUGS
 		--squish squash, no bugs here, only crimson flowers
@@ -1600,8 +1599,8 @@ function QuickChat:_AddWaypoint(peer_id,waypoint_data)
 			h = arrow_size,
 			x = arrow:x(),
 			y = arrow:y(),
---			valign = "grow",
---			halign = "grow",
+			valign = "grow",
+			halign = "grow",
 			color = peer_color,
 			alpha = 0,
 			visible = true,
@@ -1614,7 +1613,7 @@ function QuickChat:_AddWaypoint(peer_id,waypoint_data)
 			texture_rect = texture_rect,
 			w = icon_size,
 			h = icon_size,
-			color = Color.white,
+			color = peer_color,
 			visible = icon_visible,
 			layer = 1
 		})
@@ -1624,7 +1623,7 @@ function QuickChat:_AddWaypoint(peer_id,waypoint_data)
 		local font = "fonts/font_medium_shadow_mf"
 		local label = waypoint_panel:text({
 			name = "label",
-			text = label_text or "LABELLINE",
+			text = label_text or "",
 			font = font,
 			font_size = label_font_size,
 			align = "center",
@@ -1639,7 +1638,7 @@ function QuickChat:_AddWaypoint(peer_id,waypoint_data)
 		--timer or distance
 		local desc = waypoint_panel:text({ 
 			name = "desc",
-			text = "TEST2",
+			text = "",
 			font = font,
 			font_size = 16,
 			y = arrow:bottom() + 4,
@@ -1914,7 +1913,6 @@ function QuickChat:UpdateGame(t,dt)
 	
 	self:UpdateWaypoints(t,dt)
 end
-
 
 local mrot_y = mrotation.y
 local mvec3_dot = mvector3.dot
