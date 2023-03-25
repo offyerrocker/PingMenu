@@ -7,9 +7,19 @@
 			--this will also make mouse button support easier
 		--split paused/nonpaused updaters into separate tables for efficiency
 		--store hud/internal values to organize better, eg. animate_in_duration, icon_size, etc
+			--number of pulses should be saved in settings
+		--offscreen waypoint arrow needs visual adjustment
+			--arrow triangle is too even
 	--FEATURES
+		--look-at waypoint and press button to remove
+		--button/keybind to remove all waypoints
+			--remove all waypoints data AND all panel children
+		--compatibility with other waypoint mods
+			--goonmod's custom waypoints. that's it really
+			--does tdlq's version change compatibility with og gcw?
+		--allow raycasting teammates (ai or players)
 		--allow mouse button binding for keyboard users
-		
+			
 		--display current gamepad mode in menu
 		--customization
 			--custom radial messages (use QKI?)
@@ -19,9 +29,6 @@
 		--allow selecting button by waiting at menu (for controllers) for x seconds
 			--(this allows controllers to bind or reserve any options they desire, without interfering with menu operation)
 		
-			--button/keybind to remove all waypoints
-				--remove all waypoints data AND all panel children
-			--look-at waypoint and press button to remove
 	
 	--BUGS
 		--squish squash, no bugs here, only crimson flowers
@@ -1728,6 +1735,7 @@ function QuickChat:RegisterPeerById(peer_id,version)
 		local peer = session and session:peer(peer_id)
 		if peer then 
 			peer._quickchat_version = version
+			self._synced_waypoints[peer_id] = self._synced_waypoints[peer_id] or {}
 		end
 	end
 end
