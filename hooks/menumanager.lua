@@ -878,6 +878,9 @@ QuickChat._input_cache = {}
 QuickChat.allowed_binding_buttons = { --wrapper-specific bindings
 	pc = {
 		--potential buttons map is stored differently for keyboard, but should be unpacked into broadly the same format
+		mouse_buttons = { --also stores mouse buttons since keyboard input scheme is also paired with mouse input
+			"mouse 0","mouse 1","mouse 2","mouse 3","mouse 4","mouse wheel up","mouse wheel down"
+		},
 		buttons = { --the index of each these buttons as far as the controller is concerned is generally derived from its position on the keyboard, from left to right, then top to bottom (ie western book-reading order); eg. esc is 1, f1 is 2, f2 is 3, etc.
 			--numbers
 			"1","2","3","4","5","6","7","8","9","0",
@@ -955,6 +958,8 @@ QuickChat.allowed_binding_buttons.ps4 = QuickChat.allowed_binding_buttons.ps3
 QuickChat.allowed_binding_buttons.xb1 = QuickChat.allowed_binding_buttons.xbox360
 
 QuickChat._allowed_binding_buttons = {}
+--QuickChat._allowed_binding_mouse_buttons = {} --just to hold mouse buttons!
+--because this is the only case (that i know of) where multiple wrappers are naturally active at once
 
 --load dependencies/classes
 do --load RadialMenu
@@ -1101,7 +1106,8 @@ function QuickChat:PopulateInputCache()--for each radial menu that is bound to a
 	if binding_data then
 		for radial_id,button_name in pairs(binding_data) do
 			local button_name_ids = Idstring(button_name)
-			self._input_cache[button_name_ids] = {id = radial_id,state = false,button_name = button_name}
+			local is_mouse_button = false --string.find(button_name,"mouse") and true or false --should be stored somewhere else probably
+			self._input_cache[button_name_ids] = {id = radial_id,state = false,button_name = button_name,is_mouse_button = is_mouse_button}
 			if not self._radial_menus[radial_id] then
 				local radial_menu_params = self._radial_menu_params[radial_id]
 				if radial_menu_params then
@@ -1143,6 +1149,12 @@ function QuickChat:UnpackGamepadBindings()
 			for button_index,controllerbutton in ipairs(allowed_wrapper_buttons) do
 				QuickChat._allowed_binding_buttons[Idstring(controllerbutton):key()] = controllerbutton
 			end
+			--[[
+			for button_index,controllerbutton in ipairs(allowed_wrapper_bindings.mouse_buttons) do 
+				QuickChat._allowed_binding_mouse_buttons[Idstring(controllerbutton):key()] = controllerbutton
+			end
+			--]]
+			
 			--todo load mouse buttons here
 		else
 			for controllerbutton,wrapperbutton in pairs(allowed_wrapper_buttons) do
@@ -1798,11 +1810,11 @@ end
 
 --Updaters
 
-function QuickChat:AddControllerInputListener()
+function QuickChat:AddControllerInputListener() --only for rebinding
 	self:AddUpdater("quickchat_update_rebinding",callback(self,self,"UpdateRebindingListener"),true)
 end
 
-function QuickChat:RemoveControllerInputListener()
+function QuickChat:RemoveControllerInputListener() --only for rebinding
 	self:RemoveUpdater("quickchat_update_rebinding")
 end
 
@@ -1817,11 +1829,11 @@ function QuickChat:UpdateRebindingListener(t,dt)
 				local button_ids = controller:button_name(button_index)
 				local button_ids_key = button_ids:key()
 				
-				if self._allowed_binding_buttons[button_ids_key] then
+				local button_name = self._allowed_binding_buttons[button_ids_key]
+				if button_name then
 --						self:Log("detected controller " .. button_name)
 --						if gamepad_mode_enabled then 
 --						end
-					local button_name = self._allowed_binding_buttons[button_ids_key]
 					--associate that menu with this button
 					if self._callback_bind_button then
 						self:_callback_bind_button(button_name)
@@ -1832,12 +1844,29 @@ function QuickChat:UpdateRebindingListener(t,dt)
 			end
 		end
 	end
-	
+	--[[
+	--check mouse input (different device)
 	if not gamepad_mode_enabled then
---		local mouse = Input:mouse()
-		
-		--check mouse input (different controller)
+		local mouse = Input:mouse() --just directly get the mouse device
+		local pressed_list = mouse:pressed_list()
+		if #pressed_list > 0 then
+			for _,button_index in ipairs(pressed_list) do 
+				local button_ids = controller:button_name(button_index)
+				local button_ids_key = button_ids:key()
+				
+				local button_name = self._allowed_binding_mouse_buttons[button_ids_key]
+				if button_name then
+					--associate that menu with this button
+					if self._callback_bind_button then
+						self:_callback_bind_button(button_name)
+					end
+					self:RemoveControllerInputListener()
+					break
+				end
+			end
+		end
 	end
+		--]]
 end
 
 function QuickChat:AddUpdater(id,func,run_while_paused)
@@ -1872,10 +1901,21 @@ function QuickChat:UpdateGame(t,dt)
 	if not controller then
 		return
 	end
+	local player_unit = managers.player:local_player()
+	local gamepad_mode_enabled = self:IsGamepadModeEnabled()
+	local mouse
+	if not gamepad_mode_enabled then
+		mouse = Input:mouse()
+	end
 	for button_name_ids,input_data in pairs(self._input_cache) do 
 		
 		local menu = self:GetMenu(input_data.id)
-		local state = controller:down(button_name_ids) 
+		local state
+		if input_data.is_mouse_button and mouse then
+			state = mouse:down(button_name_ids)
+		else
+			state = controller:down(button_name_ids) 
+		end
 		
 --		_G.Console:SetTracker(string.format("Key down %s,%.1f,",state,t),1)
 		if menu then
@@ -1891,8 +1931,7 @@ function QuickChat:UpdateGame(t,dt)
 			else
 				if input_data.state then
 --					_G.Console:SetTracker(string.format("hide %.1f",t),4)
-					if self:IsGamepadModeEnabled() then 
-						local player_unit = managers.player:local_player()
+					if gamepad_mode_enabled then 
 						if alive(player_unit) then
 							local camera = player_unit:camera()
 							local fpcamera_unit = camera and camera._camera_unit
