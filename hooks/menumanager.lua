@@ -32,7 +32,6 @@ QuickChat._mod_path = (QuickChatCore and QuickChatCore.GetPath and QuickChatCore
 QuickChat._save_path = SavePath .. "QuickChat/"
 QuickChat._save_layouts_path = QuickChat._save_path .. "layouts/"
 QuickChat._bindings_name = "bindings_$WRAPPER.json"
---vr bindings?
 QuickChat._settings_name = "settings.json"
 QuickChat.default_settings = {
 	waypoints_max_count = 1
@@ -52,6 +51,9 @@ QuickChat.SYNC_MESSAGE_PRESET = "QuickChat_message_preset"
 QuickChat.SYNC_MESSAGE_REGISTER = "QuickChat_Register"
 QuickChat.SYNC_MESSAGE_WAYPOINT_ADD = "QuickChat_SendWaypoint"
 QuickChat.API_VERSION = "2" -- string!
+QuickChat.WAYPOINT_RAYCAST_DISTANCE = 250000 --250m
+QuickChat.WAYPOINT_SECONDARY_CAST_RADIUS = 50 --50cm
+
 QuickChat.WAYPOINT_TYPES = {
 	POSITION = 1,
 	UNIT = 2
@@ -1312,8 +1314,6 @@ function QuickChat:CallbackRadialSelection(item_data)
 end
 
 --Waypoints
-QuickChat.WAYPOINT_RAYCAST_DISTANCE = 250000 --250m
-QuickChat.WAYPOINT_SECONDARY_CAST_RADIUS = 50 --50cm
 function QuickChat:AddWaypoint(params)
 	params = params or {}
 	
@@ -1464,7 +1464,7 @@ function QuickChat:_SendWaypoint(waypoint_data)
 	end
 	
 	if sync_string then
-		self:Log(sync_string) --!
+--		self:Log(sync_string) --!
 
 		local API_VERSION = self.API_VERSION
 		for _,peer in pairs(managers.network:session():peers()) do 
@@ -1906,15 +1906,34 @@ function QuickChat:UpdateGame(t,dt)
 	self:UpdateWaypoints(t,dt)
 end
 
-function QuickChat:UpdateWaypoints(t,dt)
-	
+
+local mrot_y = mrotation.y
+local mvec3_dot = mvector3.dot
+local mvec3_normalize = mvector3.normalize
+
+local tmp_cam_fwd = Vector3()
+function QuickChat:UpdateWaypoints(t,dt)	
 	local game_t = TimerManager:game():time()
 	local viewport_cam = managers.viewport:get_current_camera()
 	local ws = self._ws
 	if not viewport_cam then 
 		return
 	end
+	local parent_panel = self._parent_panel
+	if not alive(parent_panel) then
+		return
+	end
+	
+	local pc_x,pc_y = parent_panel:center()
+	local pw,ph = parent_panel:size()
+	local outer_clamp_x_min = 0 + 100/2
+	local outer_clamp_x_max = pw - (100/2)
+	local outer_clamp_y_min = 0 + 100/2
+	local outer_clamp_y_max = ph - (100/2)
 	local camera_position = managers.viewport:get_current_camera_position()
+	local camera_rotation = managers.viewport:get_current_camera_rotation()
+	
+	mrot_y(camera_rotation,tmp_cam_fwd)
 --	local player = managers.player:local_player()
 	for peer_id,peer_data in pairs(self._synced_waypoints) do 
 		for waypoint_id=#peer_data,1,-1 do 
@@ -1945,12 +1964,12 @@ function QuickChat:UpdateWaypoints(t,dt)
 						is_valid = false
 					end
 				else
-					--is position based
+					--is position based (wp_position is already set by default)
 				end
 			end
 			
 			if is_valid then
-					--[[
+				--[[
 				if waypoint_data.animate_in then
 					local animate_in_duration = 0.5
 					waypoint_data.panel:stop()
@@ -1960,10 +1979,55 @@ function QuickChat:UpdateWaypoints(t,dt)
 						end)
 					end)
 				end
-					--]]
+				--]]
 				local panel_pos = ws:world_to_screen(viewport_cam,wp_position)
 				local distance = mvec3_distance(camera_position,wp_position)
-				waypoint_data.panel:set_center(panel_pos.x,panel_pos.y)
+				local panel_x,panel_y = panel_pos.x,panel_pos.y
+				
+				
+				local direction = wp_position - camera_position
+				mvec3_normalize(direction)
+				local dot = mvec3_dot(tmp_cam_fwd,direction)
+				
+				--[[
+				Console:SetTracker(dot,1)
+				Console:SetTracker(math.X:angle(tmp_cam_fwd,2))
+				Console:SetTracker(math.sign(tmp_cam_fwd.y),3)
+				Console:SetTracker(math.X:angle(tmp_cam_fwd) * math.sign(tmp_cam_fwd.y),4)
+				--]]
+				
+				local hud_direction
+				local c_x = panel_x - pc_x
+				local c_y = panel_y - pc_y
+				if peer_id == 1 and (dot < 0 or parent_panel:outside(panel_x - outer_clamp_x_min,panel_y - outer_clamp_y_min) or parent_panel:outside(panel_x + outer_clamp_x_min,panel_y + outer_clamp_y_min)) then
+					local x_r = math.clamp(panel_x,0,pw) / pw
+					local y_r = math.clamp(panel_y,0,ph) / ph
+
+					if c_x ~= 0 or c_y ~= 0 then
+						hud_direction = math.atan(c_y/c_x)
+						if c_x < 0 then
+							hud_direction = hud_direction + 180
+						end
+--						Console:SetTracker(hud_direction,2)
+					else
+						hud_direction = 0
+--						Console:SetTracker("blergh!",2)
+					end
+					
+					panel_x = pc_x + (outer_clamp_x_max * math.cos(hud_direction) / 2)
+					panel_y = pc_y + (outer_clamp_y_max * math.sin(hud_direction) / 2)
+				else
+					
+					if c_x ~= 0 or c_y ~= 0 then
+						hud_direction = math.atan(c_y/c_x)
+						if c_x > 0 then
+							hud_direction = hud_direction + 180
+						end
+					end
+					
+--					Console:SetTracker(hud_direction,2)
+				end
+				waypoint_data.panel:set_center(panel_x,panel_y)
 				waypoint_data.desc:set_text(string.format("%0.1fm",distance / 100))
 			end
 		end
