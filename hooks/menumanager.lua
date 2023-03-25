@@ -3,9 +3,12 @@
 		--todo use _supported_controller_type_map instead of manual mapping?
 			--may not be necessary if only the wrapper type is used
 		--needs VR support
-
+		--generalize keybinds so that they can serve general callbacks instead of just radial menus
+			--this will also make mouse button support easier
+		--split paused/nonpaused updaters into separate tables for efficiency
 	--FEATURES
 		--allow mouse button binding for keyboard users
+		
 		--display current gamepad mode in menu
 		--customization
 			--custom radial messages (use QKI?)
@@ -1888,7 +1891,6 @@ end
 
 function QuickChat:Update(source,t,dt)
 	local game_is_paused = source == "GameSetupPausedUpdate"
-	--todo split into separate updater table for efficiency
 	for id,data in pairs(self._updaters) do 
 		if not game_is_paused or data.pause_enabled then
 			data.func(t,dt,game_is_paused)
@@ -2077,10 +2079,7 @@ function QuickChat:UpdateWaypoints(t,dt)
 						local arrow_ghost_size = 16
 						local duration = 1
 						local pulse_t = 1 - (math.cos(((game_t - start_t) * 180/duration) % 180)+1) / 2
-	--					local pulse_t = math.sin((game_t- * speed * 90) % 90)
 						local size_scaled = arrow_ghost_size * (1 + pulse_t)
-	--					Console:SetTracker(pulse_t,1)
-	--					Console:SetTracker(scaled,2)
 						arrow_ghost:set_size(size_scaled,size_scaled)
 						arrow_ghost:set_alpha(1 - pulse_t)
 						arrow_ghost:set_center(waypoint_data.panel:w()/2,waypoint_data.panel:h()/2)
