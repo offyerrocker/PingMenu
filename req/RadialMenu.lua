@@ -525,17 +525,18 @@ end
 function RadialMenuDialog:on_mouseover_item(current_index,previous_index)
 	local item_data = current_index and self._items[current_index]
 	local prev_data = previous_index and self._items[previous_index]
-	if item_data and item_data.text then 
-		self:set_mouseover_text(item_data.text)
+	if item_data then 
 		if alive(self._panel) then
-			if item_data then
-				item_data.darklight:hide()
-				item_data.highlight:show()
-			end
+			item_data.darklight:hide()
+			item_data.highlight:show()
+		end
+		if item_data.text then
+			self:set_mouseover_text(item_data.text)
 		end
 	else
 		self:set_mouseover_text("")
 	end
+	
 	if prev_data then
 		prev_data.darklight:show()
 		prev_data.highlight:hide()
