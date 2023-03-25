@@ -2,11 +2,10 @@
 	--SCHEMA
 		--todo use _supported_controller_type_map instead of manual mapping?
 			--may not be necessary if only the wrapper type is used
-		--todo: in networksession hooks, send only to synced player?
-		--make saves/QuickChat/layout/ directory
-		--needs third avenue for VR with kb/virtualcontroller
+		--needs VR support
 
 	--FEATURES
+		--fadeout angle
 		--allow mouse button binding for keyboard users
 		--display current gamepad mode in menu
 		--customization
@@ -16,19 +15,10 @@
 		--localize menu button names for controllers, per gamepad type
 		--allow selecting button by waiting at menu (for controllers) for x seconds
 			--(this allows controllers to bind or reserve any options they desire, without interfering with menu operation)
+
 		
-		--PING MENU design notes
-			--no text, with the following exceptions:
-				--timers
-				--auto-generated text (automatically determined ping targets)
-			--two variants with separate keybinds
-				--temp markers
-					--disappears on a timer
-				--permanent markers
-					--stays until removed
-				
-			--button/keybind to remove all markers
-				--remove all marker data AND all panel children
+			--button/keybind to remove all waypoints
+				--remove all waypoints data AND all panel children
 	
 	--BUGS
 		--squish squash, no bugs here, only crimson flowers
@@ -44,9 +34,13 @@ QuickChat._save_layouts_path = QuickChat._save_path .. "layouts/"
 QuickChat._bindings_name = "bindings_$WRAPPER.json"
 --vr bindings?
 QuickChat._settings_name = "settings.json"
-QuickChat.default_settings = {}
-QuickChat.settings = {} --general user pref (unused)
-QuickChat.sort_settings = {}
+QuickChat.default_settings = {
+	waypoints_max_count = 1
+}
+QuickChat.settings = table.deep_map_copy(QuickChat.default_settings) --general user pref
+QuickChat.sort_settings = {
+	"waypoints_max_count"
+}
 QuickChat._bindings = {
 --[[
 	callouts_1 = "j",
@@ -56,39 +50,822 @@ QuickChat._bindings = {
 }
 QuickChat.SYNC_MESSAGE_PRESET = "QuickChat_message_preset"
 QuickChat.SYNC_MESSAGE_REGISTER = "QuickChat_Register"
-QuickChat.API_VERSION = "1" -- string!
+QuickChat.SYNC_MESSAGE_WAYPOINT_ADD = "QuickChat_SendWaypoint"
+QuickChat.API_VERSION = "2" -- string!
+QuickChat.WAYPOINT_TYPES = {
+	POSITION = 1,
+	UNIT = 2
+}
+QuickChat._synced_waypoints = {
+	{},{},{},{}
+}
+
+QuickChat._icon_presets = {
+	{
+		source = 1,
+		icon_id = "pd2_lootdrop" --1
+	},
+	{
+		source = 1,
+		icon_id = "pd2_escape" --2
+	},
+	{
+		source = 1,
+		icon_id = "pd2_talk" --3
+	},
+	{
+		source = 1,
+		icon_id = "pd2_kill" --4
+	},
+	{
+		source = 1,
+		icon_id = "pd2_drill" --5
+	},
+	{
+		source = 1,
+		icon_id = "pd2_generic_look" --6
+	},
+	{
+		source = 1,
+		icon_id = "pd2_phone" --7
+	},
+	{
+		source = 1,
+		icon_id = "pd2_c4" --8
+	},
+	{
+		source = 1,
+		icon_id = "pd2_generic_saw" --9
+	},
+	{
+		source = 1,
+		icon_id = "pd2_chainsaw" --10
+	},
+	{
+		source = 1,
+		icon_id = "pd2_power" --11
+	},
+	{
+		source = 1,
+		icon_id = "pd2_door" --12
+	},
+	{
+		source = 1,
+		icon_id = "pd2_computer" --13
+	},
+	{
+		source = 1,
+		icon_id = "pd2_wirecutter" --14
+	},
+	{
+		source = 1,
+		icon_id = "pd2_fire" --15
+	},
+	{
+		source = 1,
+		icon_id = "pd2_loot" --16
+	},
+	{
+		source = 1,
+		icon_id = "pd2_methlab" --17
+	},
+	{
+		source = 1,
+		icon_id = "pd2_generic_interact" --18
+	},
+	{
+		source = 1,
+		icon_id = "pd2_goto" --19
+	},
+	{
+		source = 1,
+		icon_id = "pd2_ladder" --20
+	},
+	{
+		source = 1,
+		icon_id = "pd2_fix" --21
+	},
+	{
+		source = 1,
+		icon_id = "pd2_question" --22
+	},
+	{
+		source = 1,
+		icon_id = "pd2_defend" --23
+	},
+	{
+		source = 1,
+		icon_id = "wp_arrow" --24
+	},
+	{
+		source = 1,
+		icon_id = "pd2_car" --25
+	},
+	{
+		source = 1,
+		icon_id = "pd2_melee" --26
+	},
+	{
+		source = 1,
+		icon_id = "pd2_water_tap" --27
+	},
+	{
+		source = 1,
+		icon_id = "pd2_bodybag" --28
+	},
+	{
+		source = 1,
+		icon_id = "wp_vial" --29
+	},
+	{
+		source = 1,
+		icon_id = "wp_standard" --30
+	},
+	{
+		source = 1,
+		icon_id = "wp_revive" --31
+	},
+	{
+		source = 1,
+		icon_id = "wp_rescue" --32
+	},
+	{
+		source = 1,
+		icon_id = "wp_trade" --33
+	},
+	{
+		source = 1,
+		icon_id = "wp_powersupply" --34
+	},
+	{
+		source = 1,
+		icon_id = "wp_watersupply" --35
+	},
+	{
+		source = 1,
+		icon_id = "wp_drill" --36
+	},
+	{
+		source = 1,
+		icon_id = "wp_hack" --37
+	},
+	{
+		source = 1,
+		icon_id = "wp_talk" --38
+	},
+	{
+		source = 1,
+		icon_id = "wp_c4" --39
+	},
+	{
+		source = 1,
+		icon_id = "wp_crowbar" --40
+	},
+	{
+		source = 1,
+		icon_id = "wp_planks" --41
+	},
+	{
+		source = 1,
+		icon_id = "wp_door" --42
+	},
+	{
+		source = 1,
+		icon_id = "wp_saw" --43
+	},
+	{
+		source = 1,
+		icon_id = "wp_bag" --44
+	},
+	{
+		source = 1,
+		icon_id = "wp_exit" --45
+	},
+	{
+		source = 1,
+		icon_id = "wp_can" --46
+	},
+	{
+		source = 1,
+		icon_id = "wp_target" --47
+	},
+	{
+		source = 1,
+		icon_id = "wp_key" --48
+	},
+	{
+		source = 1,
+		icon_id = "wp_winch" --49
+	},
+	{
+		source = 1,
+		icon_id = "wp_escort" --50
+	},
+	{
+		source = 1,
+		icon_id = "wp_powerbutton" --51
+	},
+	{
+		source = 1,
+		icon_id = "wp_server" --52
+	},
+	{
+		source = 1,
+		icon_id = "wp_powercord" --53
+	},
+	{
+		source = 1,
+		icon_id = "wp_phone" --54
+	},
+	{
+		source = 1,
+		icon_id = "wp_scrubs" --55
+	},
+	{
+		source = 1,
+		icon_id = "wp_sentry" --56
+	},
+	{
+		source = 1,
+		icon_id = "equipment_trip_mine" --57
+	},
+	{
+		source = 1,
+		icon_id = "equipment_ammo_bag" --58
+	},
+	{
+		source = 1,
+		icon_id = "equipment_doctor_bag" --59
+	},
+	{
+		source = 1,
+		icon_id = "equipment_ecm_jammer" --60
+	},
+	{
+		source = 1,
+		icon_id = "equipment_money_bag" --61
+	},
+	{
+		source = 1,
+		icon_id = "equipment_bank_manager_key" --62
+	},
+	{
+		source = 1,
+		icon_id = "equipment_chavez_key" --63
+	},
+	{
+		source = 1,
+		icon_id = "equipment_drill" --64
+	},
+	{
+		source = 1,
+		icon_id = "equipment_ejection_seat" --65
+	},
+	{
+		source = 1,
+		icon_id = "equipment_saw" --66
+	},
+	{
+		source = 1,
+		icon_id = "equipment_cutter" --67
+	},
+	{
+		source = 1,
+		icon_id = "equipment_hack_ipad" --68
+	},
+	{
+		source = 1,
+		icon_id = "equipment_gold" --69
+	},
+	{
+		source = 1,
+		icon_id = "equipment_thermite" --70
+	},
+	{
+		source = 1,
+		icon_id = "equipment_c4" --71
+	},
+	{
+		source = 1,
+		icon_id = "equipment_cable_ties" --72
+	},
+	{
+		source = 1,
+		icon_id = "equipment_bleed_out" --73
+	},
+	{
+		source = 1,
+		icon_id = "equipment_planks" --74
+	},
+	{
+		source = 1,
+		icon_id = "equipment_sentry" --75
+	},
+	{
+		source = 1,
+		icon_id = "equipment_stash_server" --76
+	},
+	{
+		source = 1,
+		icon_id = "equipment_vialOK" --77
+	},
+	{
+		source = 1,
+		icon_id = "equipment_vial" --78
+	},
+	{
+		source = 1,
+		icon_id = "equipment_ticket" --79
+	},
+	{
+		source = 1,
+		icon_id = "equipment_files" --80
+	},
+	{
+		source = 1,
+		icon_id = "equipment_harddrive" --81
+	},
+	{
+		source = 1,
+		icon_id = "equipment_evidence" --82
+	},
+	{
+		source = 1,
+		icon_id = "equipment_chainsaw" --83
+	},
+	{
+		source = 1,
+		icon_id = "equipment_manifest" --84
+	},
+	{
+		source = 1,
+		icon_id = "equipment_fire_extinguisher" --85
+	},
+	{
+		source = 1,
+		icon_id = "equipment_winch_hook" --86
+	},
+	{
+		source = 1,
+		icon_id = "equipment_bottle" --87
+	},
+	{
+		source = 1,
+		icon_id = "equipment_sleeping_gas" --88
+	},
+	{
+		source = 1,
+		icon_id = "equipment_usb_with_data" --89
+	},
+	{
+		source = 1,
+		icon_id = "equipment_usb_no_data" --90
+	},
+	{
+		source = 1,
+		icon_id = "equipment_empty_cooling_bottle" --91
+	},
+	{
+		source = 1,
+		icon_id = "equipment_cooling_bottle" --92
+	},
+	{
+		source = 1,
+		icon_id = "equipment_bfd_tool" --93
+	},
+	{
+		source = 1,
+		icon_id = "equipment_elevator_key" --94
+	},
+	{
+		source = 1,
+		icon_id = "equipment_blow_torch" --95
+	},
+	{
+		source = 1,
+		icon_id = "equipment_printer_ink" --96
+	},
+	{
+		source = 1,
+		icon_id = "equipment_plates" --97
+	},
+	{
+		source = 1,
+		icon_id = "equipment_paper_roll" --98
+	},
+	{
+		source = 1,
+		icon_id = "equipment_key_chain" --99
+	},
+	{
+		source = 1,
+		icon_id = "equipment_hand" --100
+	},
+	{
+		source = 1,
+		icon_id = "equipment_briefcase" --101
+	},
+	{
+		source = 1,
+		icon_id = "equipment_soda" --102
+	},
+	{
+		source = 1,
+		icon_id = "equipment_chrome_mask" --103
+	},
+	{
+		source = 1,
+		icon_id = "equipment_born_tool" --104
+	},
+	{
+		source = 1,
+		icon_id = "equipment_liquid_nitrogen_canister" --105
+	},
+	{
+		source = 1,
+		icon_id = "equipment_medallion" --106
+	},
+	{
+		source = 1,
+		icon_id = "equipment_bloodvial" --107
+	},
+	{
+		source = 1,
+		icon_id = "equipment_bloodvialok" --108
+	},
+	{
+		source = 1,
+		icon_id = "equipment_chimichanga" --109
+	},
+	{
+		source = 1,
+		icon_id = "equipment_stapler" --110
+	},
+	{
+		source = 1,
+		icon_id = "equipment_compounda" --111
+	},
+	{
+		source = 1,
+		icon_id = "equipment_compoundb" --112
+	},
+	{
+		source = 1,
+		icon_id = "equipment_compoundc" --113
+	},
+	{
+		source = 1,
+		icon_id = "equipment_compoundd" --114
+	},
+	{
+		source = 1,
+		icon_id = "equipment_compoundok" --115
+	},
+	{
+		source = 1,
+		icon_id = "equipment_mayan_gold" --116
+	},
+	{
+		source = 1,
+		icon_id = "equipment_blueprint" --117
+	},
+	{
+		source = 1,
+		icon_id = "equipment_tape_fingerprint" --118
+	},
+	{
+		source = 1,
+		icon_id = "equipment_tape" --119
+	},
+	{
+		source = 1,
+		icon_id = "equipment_boltcutter" --120
+	},
+	{
+		source = 1,
+		icon_id = "equipment_policebadge" --121
+	},
+	{
+		source = 1,
+		icon_id = "equipment_flammable" --122
+	},
+	{
+		source = 1,
+		icon_id = "equipment_rfid_tag_01" --123
+	},
+	{
+		source = 1,
+		icon_id = "equipment_rfid_tag_02" --124
+	},
+	{
+		source = 1,
+		icon_id = "equipment_globe" --125
+	},
+	{
+		source = 1,
+		icon_id = "equipment_scythe" --126
+	},
+	{
+		source = 1,
+		icon_id = "equipment_electrical" --127
+	},
+	{
+		source = 1,
+		icon_id = "equipment_fertilizer" --128
+	},
+	{
+		source = 1,
+		icon_id = "equipment_timer" --129
+	},
+	{
+		source = 1,
+		icon_id = "equipment_documents" --130
+	},
+	{
+		source = 1,
+		icon_id = "equipment_syringe" --131
+	},
+	{
+		source = 1,
+		icon_id = "equipment_notepad" --132
+	},
+	{
+		source = 1,
+		icon_id = "equipment_cleaning_product" --133
+	},
+	{
+		source = 1,
+		icon_id = "equipment_defibrillator" --134
+	},
+	{
+		source = 1,
+		icon_id = "equipment_gas_canister" --135
+	},
+	{
+		source = 1,
+		icon_id = "equipment_businesscard" --136
+	},
+	{
+		source = 1,
+		icon_id = "equipment_car_jack" --137
+	},
+	{
+		source = 1,
+		icon_id = "equipment_cargo_strap" --138
+	},
+	{
+		source = 1,
+		icon_id = "equipment_audio_device" --139
+	},
+	{
+		source = 1,
+		icon_id = "equipment_laptop" --140
+	},
+	{
+		source = 1,
+		icon_id = "equipment_stock" --141
+	},
+	{
+		source = 1,
+		icon_id = "equipment_barrel" --142
+	},
+	{
+		source = 1,
+		icon_id = "equipment_receiver" --143
+	},
+	{
+		source = 1,
+		icon_id = "equipment_acid" --144
+	},
+	{
+		source = 1,
+		icon_id = "equipment_sheriff_star" --145
+	},
+	{
+		source = 1,
+		icon_id = "equipment_hammer" --146
+	},
+	{
+		source = 1,
+		icon_id = "equipment_silver_ingot" --147
+	},
+	{
+		source = 1,
+		icon_id = "equipment_mould" --148
+	},
+	{
+		source = 1,
+		icon_id = "equipment_muriatic_acid" --149
+	},
+	{
+		source = 1,
+		icon_id = "equipment_caustic_soda" --150
+	},
+	{
+		source = 1,
+		icon_id = "equipment_hydrogen_chloride" --151
+	},
+	{
+		source = 2, --circle outline (ps button style)
+		texture = "guis/textures/pd2/quickchatmod/waypoint_icons_atlas", --152
+		texture_rect = {
+			0,0,
+			32,32
+		}
+	},
+	{
+		source = 2, --square outline (ps button style)
+		texture = "guis/textures/pd2/quickchatmod/waypoint_icons_atlas", --153
+		texture_rect = {
+			1 * 32,0 * 32,
+			32,32
+		}
+	},
+	{
+		source = 2, --x (ps button style)
+		texture = "guis/textures/pd2/quickchatmod/waypoint_icons_atlas", --154
+		texture_rect = {
+			2 * 32,0 * 32,
+			32,32
+		}
+	},
+	{
+		source = 2, --triangle (ps button style)
+		texture = "guis/textures/pd2/quickchatmod/waypoint_icons_atlas", --155
+		texture_rect = {
+			3 * 32,0 * 32,
+			32,32
+		}
+	},
+	{
+		source = 2, --number "1"
+		texture = "guis/textures/pd2/quickchatmod/waypoint_icons_atlas", --156
+		texture_rect = {
+			0 * 32,1 * 32,
+			32,32
+		}
+	},
+	{
+		source = 2, --number "2"
+		texture = "guis/textures/pd2/quickchatmod/waypoint_icons_atlas", --157
+		texture_rect = {
+			0 * 32,1 * 32,
+			32,32
+		}
+	},
+	{
+		source = 2, --number "3"
+		texture = "guis/textures/pd2/quickchatmod/waypoint_icons_atlas", --158
+		texture_rect = {
+			0 * 32,1 * 32,
+			32,32
+		}
+	},
+	{
+		source = 2, --number "4"
+		texture = "guis/textures/pd2/quickchatmod/waypoint_icons_atlas", --159
+		texture_rect = {
+			0 * 32,1 * 32,
+			32,32
+		}
+	},
+	{
+		source = 2, --capital letter "A"
+		texture = "guis/textures/pd2/quickchatmod/waypoint_icons_atlas", --160
+		texture_rect = {
+			0 * 32,2 * 32,
+			32,32
+		}
+	},
+	{
+		source = 2, --capital letter "B"
+		texture = "guis/textures/pd2/quickchatmod/waypoint_icons_atlas", --161
+		texture_rect = {
+			1 * 32,2 * 32,
+			32,32
+		}
+	},
+	{
+		source = 2, --capital letter "C"
+		texture = "guis/textures/pd2/quickchatmod/waypoint_icons_atlas", --162
+		texture_rect = {
+			2 * 32,2 * 32,
+			32,32
+		}
+	},
+	{
+		source = 2, --capital letter "D"
+		texture = "guis/textures/pd2/quickchatmod/waypoint_icons_atlas", --163
+		texture_rect = {
+			3 * 32,2 * 32,
+			32,32
+		}
+	},
+	{
+		source = 2, --capital letter "E"
+		texture = "guis/textures/pd2/quickchatmod/waypoint_icons_atlas", --164
+		texture_rect = {
+			0 * 32,3 * 32,
+			32,32
+		}
+	},
+	{
+		source = 2, --capital letter "F"
+		texture = "guis/textures/pd2/quickchatmod/waypoint_icons_atlas", --165
+		texture_rect = {
+			1 * 32,3 * 32,
+			32,32
+		}
+	},
+	{
+		source = 2, --"do not" symbol (circle bisected with diagonal cross)
+		texture = "guis/textures/pd2/quickchatmod/waypoint_icons_atlas", --166
+		texture_rect = {
+			2 * 32,3 * 32,
+			32,32
+		}
+	},
+	{
+		source = 2, --checkmark symbol
+		texture = "guis/textures/pd2/quickchatmod/waypoint_icons_atlas", --167
+		texture_rect = {
+			3 * 32,3 * 32,
+			32,32
+		}
+	}
+}
+
+QuickChat._label_presets = {
+	"qc_wp_look",							--1
+	"qc_wp_go",								--2
+	"qc_wp_loot",							--3
+	"qc_wp_kill",							--4
+	"qc_wp_deploy"							--5
+}
 
 QuickChat._message_presets = {
-	yes = "qc_ptm_yes",
-	no = "qc_ptm_no",
-	greeting = "qc_ptm_greeting",
-	thanks = "qc_ptm_thanks",
-	apology = "qc_ptm_apology",
-	help = "qc_ptm_help",
-	attack = "qc_ptm_attack",
-	defend = "qc_ptm_defend",
-	need_docbag = "qc_ptm_need_docbag",
-	need_fak = "qc_ptm_need_fak",
-	need_ammo = "qc_ptm_need_ammo",
-	need_ecm = "qc_ptm_need_ecm",
-	need_sentrygun = "qc_ptm_need_sentrygun",
-	need_tripmine = "qc_ptm_need_tripmine",
-	need_shapedcharge = "qc_ptm_need_shapedcharge",
-	need_grenades = "qc_ptm_need_grenades",
-	need_convert = "qc_ptm_need_convert"
+	"qc_ptm_general_yes",					--1
+	"qc_ptm_general_no",					--2
+	"qc_ptm_general_cheer",					--3
+	"qc_ptm_general_greeting",				--4
+	"qc_ptm_general_thanks",				--5
+	"qc_ptm_general_apology",				--6
+	"qc_ptm_general_curse",					--7
+	"qc_ptm_general_forgive",				--8
+	"qc_ptm_general_acknowledged",			--9
+	"qc_ptm_general_goodgame_normal",		--10
+	"qc_ptm_general_goodgame_toxic",		--11
+	"qc_ptm_general_bye",					--12
+	"qc_ptm_general_brb",					--13
+	"qc_ptm_general_nokeyboard",			--14
+	"qc_ptm_general_leaving_now",			--15
+	"qc_ptm_general_leaving_soon",			--16
+	"qc_ptm_general_leaving_last_game",		--17
+	"qc_ptm_general_healembargo",			--18
+	"qc_ptm_general_achievementhunting",	--19
+	"qc_ptm_comms_help",					--20
+	"qc_ptm_comms_follow",					--21
+	"qc_ptm_comms_attack",					--22
+	"qc_ptm_comms_defend",					--23
+	"qc_ptm_comms_regroup",					--24
+	"qc_ptm_comms_reviving",				--25
+	"qc_ptm_comms_summon",					--26
+	"qc_ptm_comms_caution",					--27
+	"qc_ptm_comms_opening_door",			--28
+	"qc_ptm_comms_jammed_drill",			--29
+	"qc_ptm_comms_jammed_hack",				--30
+	"qc_ptm_direction_left",				--31
+	"qc_ptm_direction_right",				--32
+	"qc_ptm_direction_up",					--33
+	"qc_ptm_direction_down",				--34
+	"qc_ptm_direction_forward",				--35
+	"qc_ptm_direction_backward",			--36
+	"qc_ptm_tactic_ask_stealth",			--37
+	"qc_ptm_tactic_ask_hybrid",				--38
+	"qc_ptm_tactic_ask_loud",				--39
+	"qc_ptm_tactic_suggest_stealth",		--40
+	"qc_ptm_tactic_suggest_hybrid",			--41
+	"qc_ptm_tactic_suggest_loud",			--42
+	"qc_ptm_need_docbag",					--43
+	"qc_ptm_need_fak",						--44
+	"qc_ptm_need_ammo",						--45
+	"qc_ptm_need_ecm",						--46
+	"qc_ptm_need_sentrygun",				--47
+	"qc_ptm_need_sentrygun_silent",			--48
+	"qc_ptm_need_tripmine",					--49
+	"qc_ptm_need_shapedcharge",				--50
+	"qc_ptm_need_grenades",					--51
+	"qc_ptm_need_convert",					--52
+	"qc_ptm_need_ties",						--53
+	"qc_ptm_enemy_sniper",					--54
+	"qc_ptm_enemy_cloaker",					--55
+	"qc_ptm_enemy_taser",					--56
+	"qc_ptm_enemy_dozer",					--57
+	"qc_ptm_enemy_medic",					--58
+	"qc_ptm_enemy_shield",					--59
+	"qc_ptm_enemy_winters"					--60
 }
 
-QuickChat._preset_callbacks = {
-	chat = function(item_data)
-		return function()
-			if item_data.preset_text then 
-				QuickChat:SendPresetMessage(item_data.preset_text)
-			elseif item_data.text then
-				QuickChat:SendChatToAll(item_data.text)
-			end
-		end
-	end
-}
 QuickChat._radial_menus = {} --generated radial menus
 QuickChat._radial_menu_params = {} --ungenerated radial menus; populated with user data
 
@@ -200,9 +977,28 @@ do --load Lua ini Parser
 	end
 end
 
+local mvec3_distance = mvector3.distance
+
 function QuickChat:Log(msg)
 	if Console then
 		Console:Log(msg)
+	end
+end
+
+function QuickChat:GetMaxNumWaypoints()
+	return self.settings.waypoints_max_count
+end
+
+function QuickChat:GetIconDataByIndex(icon_index)
+	if icon_index then
+		local icon_data = self._icon_presets[icon_index]
+		if icon_data then
+			if icon_data.source == 1 then
+				return tweak_data.hud_icons:get_icon_data(icon_data.icon_id)
+			elseif icon_data.source == 2 then
+				return icon_data.texture,icon_data.texture_rect
+			end
+		end
 	end
 end
 
@@ -210,6 +1006,17 @@ end
 
 function QuickChat:Setup() --on game setup complete
 	self:PopulateInputCache()
+	if managers.hud then
+		local ws = managers.hud._saferect
+		self._ws = ws
+		local ws_panel = ws:panel()
+		self._parent_panel = ws_panel:panel({
+			name = "quickchat_parent_panel",
+			valign = "grow",
+			halign = "grow",
+			layer = 4
+		})
+	end
 	self:AddUpdater("QuickChat_UpdateInGame",callback(self,self,"UpdateGame"),false)
 end
 
@@ -384,6 +1191,7 @@ function QuickChat:LoadMenuFromIni(ini_data) --converts and validates saved data
 			"focus_alpha",
 			"unfocus_alpha",
 			"item_margin",
+			"reset_mouse_position_on_show",
 			"item_text_visible"
 		}
 		local basic_item_values = {
@@ -404,14 +1212,19 @@ function QuickChat:LoadMenuFromIni(ini_data) --converts and validates saved data
 				end
 			end
 			
+			if body.ping_as_default then 
+--				new_menu_params.callback_on_cancelled = callback(self,self,"AddWaypoint")
+				new_menu_params.callback_on_cancelled = function() local success,err = blt.pcall(callback(self,self,"AddWaypoint")) if err then self:Log(err) end end
+			end
+			
 			new_menu_params.texture_highlight = body.texture_highlight or default_menu_data.texture_highlight
 			new_menu_params.texture_darklight = body.texture_darklight or default_menu_data.texture_darklight
 			new_menu_params.texture_cursor = body.texture_cursor or default_menu_data.texture_cursor
 			
 			for i,item_data in ipairs(ini_data) do 
 				local new_item = {}
-				if item_data.icon_id then
-					local texture,texture_rect = tweak_data.hud_icons:get_icon_data(item_data.icon_id)
+				if item_data.icon_index and self._icon_presets[item_data.icon_index] then
+					local texture,texture_rect = self:GetIconDataByIndex(item_data.icon_index)
 					new_item.texture = texture
 					new_item.texture_rect = texture_rect
 				elseif item_data.texture then
@@ -421,15 +1234,18 @@ function QuickChat:LoadMenuFromIni(ini_data) --converts and validates saved data
 					end
 				end
 				
-				
-				if item_data.preset_text and self._message_presets[item_data.preset_text] then 
-					new_item.preset_text = item_data.preset_text
-					new_item.text = managers.localization:text(self._message_presets[item_data.preset_text])
+				local message_preset_index = item_data.preset_text_index and self._message_presets[item_data.preset_text_index]
+				local message_preset_name = message_preset_index and self._message_presets[message_preset_index]
+				if message_preset_name then 
+					new_item.preset_text_index = message_preset_index
+					new_item.text = managers.localization:text(message_preset_name)
 				elseif item_data.text then 
 					new_item.text = item_data.text
 				end
 				if item_data.preview_text then --not localized
 					new_item.text = item_data.preview_text
+				elseif message_preset_name then
+					new_item.text = managers.localization:text(message_preset_name)
 				end
 				
 				if item_data.color then 
@@ -453,9 +1269,8 @@ function QuickChat:LoadMenuFromIni(ini_data) --converts and validates saved data
 						--error
 	--					log(e)
 					end
-				elseif item_data.preset_callback then 
-					local f = self._preset_callbacks[item_data.preset_callback]
-					new_item.callback = f and f(item_data)
+				else
+					new_item.callback = callback(self,self,"CallbackRadialSelection",item_data)
 				end
 				
 				for _,key in pairs(basic_item_values) do 
@@ -483,6 +1298,403 @@ function QuickChat:ToggleMenu(id)
 	end
 end
 
+function QuickChat:CallbackRadialSelection(item_data)
+	local preset_text_index = item_data.preset_text_index
+	local text = item_data.text
+	if preset_text_index then 
+		self:SendPresetMessage(preset_text_index)
+	elseif text then
+		self:SendChatToAll(text)
+	end
+	if item_data.waypoint then
+		self:AddWaypoint(item_data)
+	end
+end
+
+--Waypoints
+QuickChat.WAYPOINT_RAYCAST_DISTANCE = 250000 --250m
+QuickChat.WAYPOINT_SECONDARY_CAST_RADIUS = 50 --50cm
+function QuickChat:AddWaypoint(params)
+	params = params or {}
+	
+	local viewport_cam = managers.viewport:get_current_camera()
+	if not viewport_cam then 
+		--doesn't typically happen, usually for only a brief moment when all four players go into custody
+		return 
+	end
+	local cam_pos = viewport_cam:position()
+	local cam_aim = viewport_cam:rotation():y()
+	
+	local to_pos = cam_pos + (cam_aim * self.WAYPOINT_RAYCAST_DISTANCE)
+	
+	local mode = 1
+	
+	local raycast
+	if mode == 1 then --precise raycast
+		raycast = World:raycast("ray",cam_pos,to_pos,"slot_mask",managers.slot:get_mask("bullet_impact_targets")) or {}
+	else
+		--cylinder cast
+		raycast = nil
+	end
+	if raycast then
+		local unit_result
+		local unit = raycast.unit
+		local position = raycast.position
+		local end_t
+		if params.timer and params.timer > 0 then
+			end_t = TimerManager:game():time() + params.timer
+		end
+		local label_index = params.label_index or 0
+		local icon_index = params.icon_index or 0
+		
+		if unit then
+			local function find_interactable(this_unit)
+				if this_unit.interaction then 
+					if this_unit:interaction() and not this_unit:interaction()._disabled and this_unit:interaction()._active then
+						--look for any interactable object
+						--not just any objects with an interaction extension- 
+						--must be active and currently interactable
+					
+		--				self:log("active=" .. tostring(this_unit:interaction()._active) .. ",disabled=".. tostring(this_unit:interaction()._disabled))
+						return this_unit
+					end
+				end
+			end
+			
+			local function find_character(this_unit,no_further)
+				if alive(this_unit) then
+					if not no_further and this_unit:in_slot(8) and this_unit.parent and this_unit:parent() then 
+						return find_character(this_unit:parent(),true)
+					elseif this_unit.character_damage and this_unit:character_damage() and not this_unit:character_damage():dead() then
+						return this_unit
+			--		elseif this_unit:parent() and alive(this_unit:parent():base()) and this_unit:parent():base().tweak_table then 
+					end
+				end
+			end
+			
+			if unit and alive(unit) then 
+				unit_result = find_character(unit) or find_interactable(unit)
+			end
+			
+			if not unit_result then
+				--do secondary sphere cast to catch interactables specifically
+				local spherecast = World:find_units_quick("sphere",position,self.WAYPOINT_SECONDARY_CAST_RADIUS,1)
+				for _,_unit in ipairs(spherecast) do 
+					local found_interactable = find_interactable(_unit)
+					if found_interactable then
+						unit_result = found_interactable
+						break
+					end
+				end
+				
+			end
+			
+			local waypoint_type
+			local _unit_id,unit_id
+			if alive(unit_result) then
+				--check if valid unit
+				_unit_id = unit:id()
+			end
+			if _unit_id and _unit_id > 0 then	
+				--attach waypoint to unit
+				waypoint_type = self.WAYPOINT_TYPES.UNIT
+				unit_id = _unit_id
+			else
+				--create waypoint at position
+				waypoint_type = self.WAYPOINT_TYPES.POSITION
+			end
+			
+--			local peer_id = managers.network:session():local_peer():id()
+--			local peer_color = tweak_data.chat_colors[peer_id]
+			local waypoint_data = {
+				waypoint_type = waypoint_type,
+				icon_index = icon_index,
+				label_index = label_index,
+				end_t = end_t,
+				position = position,
+				unit_id = unit_id,
+				unit = unit_result
+			}
+			local peer_id = managers.network:session():local_peer():id()
+			
+			self:_SendWaypoint(waypoint_data)
+			self:_AddWaypoint(peer_id,waypoint_data)
+		end
+	end
+	
+end
+
+function QuickChat:_SendWaypoint(waypoint_data)
+	local sync_string
+	local waypoint_type = waypoint_data.waypoint_type
+	local timer_string = waypoint_data.timer_string
+	local label_index = waypoint_data.label_index
+	local icon_index = waypoint_data.icon_index
+	local unit_id = waypoint_data.unit_id
+	local end_t = waypoint_data.end_t
+	if end_t and end_t ~= 0 then
+		local int = math.floor(end_t)
+		local dec = end_t - int
+		timer_string = string.format("%i:%i",int,dec * 100)
+	else
+		timer_string = "0"
+	end
+	local pos = waypoint_data.position
+	if waypoint_type == self.WAYPOINT_TYPES.POSITION then
+		sync_string = string.format("%i;%i;%i;%s;%i;%i;%i",
+			waypoint_type,
+			label_index,
+			icon_index,
+			timer_string,
+			pos.x,
+			pos.y,
+			pos.z
+		)
+	elseif waypoint_type == self.WAYPOINT_TYPES.UNIT then
+		sync_string = string.format("%i;%i;%i;%i;%i;%i;%i;%i",
+			waypoint_type,
+			label_index,
+			icon_index,
+			timer_string,
+			pos.x,
+			pos.y,
+			pos.z,
+			unit_id
+		)
+	end
+	
+	if sync_string then
+		self:Log(sync_string) --!
+
+		local API_VERSION = self.API_VERSION
+		for _,peer in pairs(managers.network:session():peers()) do 
+			if peer._quickchat_version == API_VERSION then
+				LuaNetworking:SendToPeer(peer:id(),self.SYNC_MESSAGE_WAYPOINT_ADD,sync_string)
+			end
+		end
+	end
+end
+
+function QuickChat:ReceiveWaypoint(peer_id,message_string)
+	local data = string.split(message_string,";")
+	if data then
+		local to_int = function(n)
+			local _n = n and tonumber(n)
+			if _n then 
+				return math.floor(_n)
+			end
+			return 0
+		end
+		
+		local waypoint_type = to_int(data[1])
+		local waypoint_label = to_int(data[2])
+		local waypoint_icon = to_int(data[3])
+		local _timer_data = data[4]
+		local start_t = TimerManager:game():time() --not exactly the same as original send time due to latency, but close enough; 
+		local end_t = nil --end_t should be properly synced, on the other hand
+		if _timer_data ~= "0" and string.find(_timer_data,":") then
+			local timer_data = string.split(_timer_data,":")
+			--circumvent issue with regional "." vs "," difference for post-decimal values
+			end_t = to_int(timer_data[1]) + to_int(timer_data[2]) / 100
+		end
+		local position = Vector3(to_int(data[5]),to_int(data[6]),to_int(data[7]))
+		
+		if waypoint_type == self.WAYPOINT_TYPES.POSITION then
+			self:_AddWaypoint(peer_id,{
+				waypoint_type = waypoint_type,
+				label_index = waypoint_label,
+				icon_index = waypoint_icon,
+				start_t = start_t,
+				end_t = end_t,
+				position = position,
+				unit = unit_result
+			})
+		elseif type_id == self.WAYPOINT_TYPES.UNIT then
+			local unit_id = to_int(data[8])
+			local unit_result
+			if unit_id > 0 then
+				--cheat the networking a little bit; 
+				--syncing units directly without using the built-in network extensions is a challenge
+				--but hypothetically, most units should probably be well within this distance at the time of receiving the waypoint message
+				local near_units = World:find_units_quick("sphere",position,self.WAYPOINT_RAYCAST_DISTANCE / 2,1)
+				for _,unit in pairs(near_units) do 
+					if unit:id() == unit_id then
+						unit_result = unit
+						break
+					end
+				end
+			else
+				--bad data
+				return
+			end
+			self:_AddWaypoint(peer_id,{
+				waypoint_type = waypoint_type,
+				label_index = waypoint_label,
+				icon_index = waypoint_icon,
+				start_t = start_t,
+				end_t = end_t,
+				position = position,
+				unit = unit_result
+			})
+		end
+	end
+end
+
+function QuickChat:_AddWaypoint(peer_id,waypoint_data)
+	local label_index = waypoint_data.label_index
+	local icon_index = waypoint_data.icon_index
+	local end_t = waypoint_data.end_t
+	local peer_color = tweak_data.chat_colors[peer_id]
+	local parent_panel = self._parent_panel
+	if alive(parent_panel) then 
+		
+		local waypoint_panel = parent_panel:panel({
+			name = "panel",
+			w = 100,
+			h = 100,
+			valign = "grow",
+			halign = "grow",
+			visible = true,
+			alpha = 1,
+			layer = 1
+		})
+		local c_x,c_y = waypoint_panel:center()
+		
+		local debug_rect = waypoint_panel:rect({
+			name="",
+			color=Color.red,
+			valign="grow",
+			halign="grow",
+			alpha=0.2,
+			visible = false
+		})
+		
+		
+		local texture,texture_rect = self:GetIconDataByIndex(icon_index)
+		local icon_visible = texture and true or false
+		local label_id = label_index and self._label_presets[label_index]
+		local label_text = label_id and managers.localization:text(label_id)
+		
+		local icon_size = 24
+		local dot_size = 16
+		local label_font_size = 24
+		local dot_texture,dot_texture_rect = self:GetIconDataByIndex(152)
+		local dot = waypoint_panel:bitmap({
+			name = "dot",
+			texture = dot_texture,--"guis/textures/pd2/progress_reload",
+			texture_rect = dot_texture_rect,
+			w = dot_size,
+			h = dot_size,
+			color = peer_color,
+			visible = true,
+			layer = 4
+		})
+		dot:set_center(c_x,c_y)
+		local dot_ghost = waypoint_panel:bitmap({
+			name = "dot_ghost",
+			texture = dot_texture,
+			texture_rect = dot_texture_rect,
+			w = dot_size,
+			h = dot_size,
+			x = dot:x(),
+			y = dot:y(),
+			color = peer_color,
+			visible = false,
+			layer = 5
+		})
+		
+		local icon = waypoint_panel:bitmap({
+			name = "icon",
+			texture = texture,
+			texture_rect = texture_rect,
+			w = icon_size,
+			h = icon_size,
+			color = Color.white,
+			visible = icon_visible,
+			layer = 1
+		})
+		icon:set_bottom(dot:y())
+		icon:set_center_x(c_x)
+		
+		local font = "fonts/font_medium_shadow_mf"
+		local label = waypoint_panel:text({
+			name = "label",
+			text = label_text or "LABELLINE",
+			font = font,
+			font_size = label_font_size,
+			align = "center",
+			vertical = "top",
+			color = peer_color,
+			layer = 3
+		})
+		if not icon_visible then
+			label:set_y(dot:y() - label_font_size)
+		end
+		
+		--timer or distance
+		local desc = waypoint_panel:text({ 
+			name = "desc",
+			text = "TEST2",
+			font = font,
+			font_size = 16,
+			y = dot:bottom() + 4,
+			align = "center",
+			vertical = "top",
+			color = peer_color,
+			layer = 3
+		})
+		local peer_waypoints = QuickChat._synced_waypoints[peer_id]
+		local current_num_waypoints = #peer_waypoints
+		local max_num_waypoints = self:GetMaxNumWaypoints()
+		if current_num_waypoints >= max_num_waypoints then
+			self:RemoveWaypoint(peer_id,1)
+		end
+		local new_waypoint = {
+			panel = waypoint_panel,
+			icon = icon,
+			label = label,
+			desc = desc,
+			end_t = end_t,
+--			animate_in = true,
+			waypoint_type = waypoint_data.waypoint_type,
+			unit = waypoint_data.unit,
+			position = waypoint_data.position
+--			params = waypoint_data
+		}
+--		waypoint_panel:set_size(1,1)
+		table.insert(peer_waypoints,#peer_waypoints + 1,new_waypoint)
+--				local waypoint_index = 1 + ((current_num_waypoints + 1) % max_num_waypoints)
+	end
+end
+
+function QuickChat:RemoveWaypoint(peer_id,waypoint_index)
+	local peer_waypoints = peer_id and self._synced_waypoints[peer_id]
+	if peer_waypoints and waypoint_index then
+		local waypoint_data = table.remove(peer_waypoints,waypoint_index)
+		if waypoint_data and alive(waypoint_data.panel) then
+			waypoint_data.panel:parent():remove(waypoint_data.panel)
+		end
+	end
+end
+
+function QuickChat:OnPeerDisconnected(peer_id)
+	if peer_id then
+		self:DisposeWaypoints(peer_id)
+	end
+end
+
+function QuickChat:DisposeWaypoints(peer_id)
+	local peer_waypoints = peer_id and self._synced_waypoints[peer_id]
+	if peer_waypoints then
+		for waypoint_index=#peer_waypoints,1,-1 do
+			local waypoint_data = table.remove(peer_waypoints,waypoint_index)
+			if alive(waypoint_data.panel) then
+				waypoint_data.panel:parent():remove(waypoint_data.panel)
+			end
+		end
+	end
+end
+
 --Networking
 
 function QuickChat:RegisterPeerById(peer_id,version)
@@ -496,51 +1708,66 @@ function QuickChat:RegisterPeerById(peer_id,version)
 end
 
 function QuickChat:GetPeerVersion(peer_id)
-	if peer then 
-		return peer._quickchat_version
-	end
-end
-
-function QuickChat:SendPresetMessage(preset_text)
-	if managers.chat then
-		local network_mgr = managers.network
-		if network_mgr then
-			local session = network_mgr:session()
-			if session then 
-				local local_peer = session:local_peer()
-				local username = network_mgr.account:username()
-				local text_localized = managers.localization:text(self._message_presets[preset_text])
-				for _,peer in pairs(session:peers()) do 
-					local quickchat_version = peer._quickchat_version 
-					if quickchat_version then
-						--if the QC API changes in the future, outbound messages will be reformatted here
-						LuaNetworking:SendToPeer(peer:id(),self.SYNC_MESSAGE_PRESET,preset_text)
-					else
-						if peer:ip_verified() then
-							peer:send("send_chat_message", ChatManager.GAME, text_localized) --LuaNetworking.HiddenChannel
-						end
-					end
-				end
-				managers.chat:receive_message_by_peer(ChatManager.GAME,local_peer,text_localized)
-			end
+	if peer_id then 
+		local session = managers.network:session()
+		local peer = session and session:peer(peer_id)
+		if peer then 
+			return peer._quickchat_version
 		end
 	end
 end
 
-function QuickChat:ReceivePresetMessage(peer_id,preset_text)
-	if managers.chat then
-		local network_mgr = managers.network
-		if network_mgr then
-			local session = network_mgr:session()
-			if session then
-				local peer = session:peer()
-				if peer then
-					local peer_color = tweak_data.chat_colors[peer_id]
-					local username = peer:name()
-					local text_localized = preset_text and managers.localization:text(self._message_presets[preset_text])
-					--local quickchat_version = peer._quickchat_version
-					--if the QC API changes in the future, inbound messages will be reformatted here
-					managers.chat:_receive_message(ChatManager.GAME,username,text_localized,peer_color)
+function QuickChat:SendPresetMessage(preset_text_index)
+	local preset_text = preset_text_index and self._message_presets[preset_text_index]
+	if preset_text then
+		if managers.chat then
+			local network_mgr = managers.network
+			if network_mgr then
+				local session = network_mgr:session()
+				if session then 
+					local local_peer = session:local_peer()
+					local username = network_mgr.account:username()
+					local text_localized = managers.localization:text(preset_text)
+					for _,peer in pairs(session:peers()) do 
+						local quickchat_version = peer._quickchat_version 
+						
+						--if the QC API changes in the future, outbound messages will be reformatted here
+						if quickchat_version == self.API_VERSION then
+							--v2
+							LuaNetworking:SendToPeer(peer:id(),self.SYNC_MESSAGE_PRESET,preset_text_index)
+						else
+							if peer:ip_verified() then
+								peer:send("send_chat_message", ChatManager.GAME, text_localized) --LuaNetworking.HiddenChannel
+							end
+						end
+					end
+					managers.chat:receive_message_by_peer(ChatManager.GAME,local_peer,text_localized)
+				end
+			end
+		end
+	else
+		self:Log("Error: SendPresetMessage(" .. tostring(preset_text_index) .. ") bad preset index!")
+		return
+	end
+end
+
+function QuickChat:ReceivePresetMessage(peer_id,preset_text_index)
+	local preset_text = preset_text_index and self._message_presets[preset_text_index]
+	if preset_text then
+		if managers.chat then
+			local network_mgr = managers.network
+			if network_mgr then
+				local session = network_mgr:session()
+				if session then
+					local peer = session:peer()
+					if peer then
+						local peer_color = tweak_data.chat_colors[peer_id]
+						local username = peer:name()
+						local text_localized = managers.localization:text(preset_text)
+						--local quickchat_version = peer._quickchat_version
+						--if the QC API changes in the future, inbound messages will be reformatted here
+						managers.chat:_receive_message(ChatManager.GAME,username,text_localized,peer_color)
+					end
 				end
 			end
 		end
@@ -674,6 +1901,72 @@ function QuickChat:UpdateGame(t,dt)
 		end
 		
 		input_data.state = state
+	end
+	
+	self:UpdateWaypoints(t,dt)
+end
+
+function QuickChat:UpdateWaypoints(t,dt)
+	
+	local game_t = TimerManager:game():time()
+	local viewport_cam = managers.viewport:get_current_camera()
+	local ws = self._ws
+	if not viewport_cam then 
+		return
+	end
+	local camera_position = managers.viewport:get_current_camera_position()
+--	local player = managers.player:local_player()
+	for peer_id,peer_data in pairs(self._synced_waypoints) do 
+		for waypoint_id=#peer_data,1,-1 do 
+			
+			local waypoint_data = peer_data[waypoint_id]
+			local is_valid = true
+			local end_t = waypoint_data.end_t
+			local wp_position = waypoint_data.position
+			if end_t then
+				local remaining_t = end_t - game_t
+				if remaining_t <= 0 then
+					--expire
+					is_valid = false
+					self:RemoveWaypoint(peer_id,waypoint_id)
+				else
+					waypoint_data.desc:set_text(string.format("%0.1f",remaining_t))
+				end
+			else
+				local waypoint_type = waypoint_data.waypoint_type
+				if waypoint_type == self.WAYPOINT_TYPES.UNIT then
+					local unit = waypoint_data.unit
+					if alive(unit) then
+						local oobb = unit:oobb()
+						wp_position = oobb and oobb:center() or unit:position() or wp_position
+					else
+						--expire (unit dead/despawned or otherwise invalid)
+						self:RemoveWaypoint(peer_id,waypoint_id)
+						is_valid = false
+					end
+				else
+					--is position based
+				end
+			end
+			
+			if is_valid then
+					--[[
+				if waypoint_data.animate_in then
+					local animate_in_duration = 0.5
+					waypoint_data.panel:stop()
+					waypoint_data.panel:animate(function()
+						over(animate_in_duration,function()
+							
+						end)
+					end)
+				end
+					--]]
+				local panel_pos = ws:world_to_screen(viewport_cam,wp_position)
+				local distance = mvec3_distance(camera_position,wp_position)
+				waypoint_data.panel:set_center(panel_pos.x,panel_pos.y)
+				waypoint_data.desc:set_text(string.format("%0.1fm",distance / 100))
+			end
+		end
 	end
 end
 
@@ -927,7 +2220,9 @@ end)
 Hooks:Add("NetworkReceivedData","QuickChat_NetworkReceivedData",function(sender, message_id, message_body)
 	if message_id == QuickChat.SYNC_MESSAGE_PRESET then
 		QuickChat:ReceivePresetMessage(sender,message_body)
-	elseif message_id == QuickChat.API_VERSION then
+	elseif message_id == QuickChat.SYNC_MESSAGE_WAYPOINT_ADD then
+		QuickChat:ReceiveWaypoint(sender,message_body)
+	elseif message_id == QuickChat.SYNC_MESSAGE_REGISTER then
 		QuickChat:RegisterPeerById(sender,message_body)
 	end
 end)

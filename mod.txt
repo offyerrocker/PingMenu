@@ -1,11 +1,11 @@
 {
 	"name" : "QuickChat",
-	"description" : "Use a radial menu like Left 4 Dead to quickly send chat messages.\nController-compatible.",
+	"description" : "Use a radial menu to quickly send chat messages or place synced waypoints.\nController-compatible.",
 	"author" : "Offyerrocker",
 	"contact" : "Discord: Offyerrocker#3878",
-	"version" : "1.0.0",
+	"version" : "2.0.0",
 	"blt_version" : 2,
-	"color" : "255 255 255",
+	"color" : "0 0 255",
 	"hooks" : [
 		{
 			"hook_id" : "lib/managers/menumanager",
@@ -18,6 +18,10 @@
 		{
 			"hook_id" : "lib/network/hostnetworksession",
 			"script_path" : "hooks/hostnetworksession.lua"
+		},
+		{
+			"hook_id" : "lib/network/base/networkpeer",
+			"script_path" : "hooks/networkpeer.lua"
 		}
 	]
 }

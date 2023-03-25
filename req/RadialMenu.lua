@@ -138,6 +138,7 @@ function RadialMenuObject:setup(params) --create new instance of a radial select
 		mouseover_text_visible = params.mouseover_text_visible and true or false,
 		item_text_visible = params.item_text_visible and true or false,
 		reset_mouse_position_on_show = params.reset_mouse_position_on_show and true or false,
+		callback_on_cancelled = params.callback_on_cancelled,
 		title = "", --not used
 		text = "" --not used
 	})
@@ -222,6 +223,8 @@ end
 
 function RadialMenuDialog:config(data)
 	self._data = data
+	
+	self._callback_on_cancelled = data.callback_on_cancelled
 	
 	if data.controller_mode_enabled ~= nil then 
 		self._controller_mode_enabled = data.controller_mode_enabled --if true, checks the axis movement and selects the item by that angle
@@ -513,6 +516,12 @@ function RadialMenuDialog:_callback_item_confirmed(index,item_data)
 	self:animate_mouseover_item_unfocus(index)
 end
 
+function RadialMenuDialog:callback_on_cancelled()
+	if self._callback_on_cancelled then
+		self._callback_on_cancelled(self)
+	end
+end
+
 function RadialMenuDialog:on_mouseover_item(current_index,previous_index)
 	local item_data = current_index and self._items[current_index]
 	local prev_data = previous_index and self._items[previous_index]
@@ -702,6 +711,8 @@ function RadialMenuDialog:hide(select_current)
 		if index then
 			self:_callback_item_confirmed(index,self._items[index])
 			self:on_mouseover_item(nil,index)
+		else
+			self:callback_on_cancelled()
 		end
 		self:clear_selected_index()
 		self:set_mouseover_text("")
