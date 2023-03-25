@@ -6,6 +6,7 @@
 		--generalize keybinds so that they can serve general callbacks instead of just radial menus
 			--this will also make mouse button support easier
 		--split paused/nonpaused updaters into separate tables for efficiency
+		--store hud/internal values to organize better, eg. animate_in_duration, icon_size, etc
 	--FEATURES
 		--allow mouse button binding for keyboard users
 		
@@ -1424,6 +1425,7 @@ function QuickChat:AddWaypoint(params)
 				waypoint_type = waypoint_type,
 				icon_index = icon_index,
 				label_index = label_index,
+				start_t = TimerManager:game():time(),
 				end_t = end_t,
 				position = position,
 				unit_id = unit_id,
@@ -1675,10 +1677,10 @@ function QuickChat:_AddWaypoint(peer_id,waypoint_data)
 			desc = desc,
 			arrow = arrow,
 			arrow_ghost = arrow_ghost,
-			start_t = waypoint_data.start_t or 0,
+			start_t = waypoint_data.start_t or TimerManager:game():time(),
 			end_t = end_t,
 			state = "onscreen",
-			animate_in_duration = _G.sdfasd or 3,
+			animate_in_duration = 3,
 			waypoint_type = waypoint_data.waypoint_type,
 			unit = waypoint_data.unit,
 			position = waypoint_data.position
