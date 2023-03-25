@@ -1576,30 +1576,35 @@ function QuickChat:_AddWaypoint(peer_id,waypoint_data)
 		local label_text = label_id and managers.localization:text(label_id)
 		
 		local icon_size = 24
-		local dot_size = 16
+		local arrow_size = 16
 		local label_font_size = 24
-		local dot_texture,dot_texture_rect = self:GetIconDataByIndex(152)
-		local dot = waypoint_panel:bitmap({
-			name = "dot",
-			texture = dot_texture,--"guis/textures/pd2/progress_reload",
-			texture_rect = dot_texture_rect,
-			w = dot_size,
-			h = dot_size,
+		local arrow_texture,arrow_texture_rect = self:GetIconDataByIndex(152)
+		local arrow = waypoint_panel:bitmap({
+			name = "arrow",
+			texture = arrow_texture,--"guis/textures/pd2/progress_reload",
+			texture_rect = arrow_texture_rect,
+			w = arrow_size,
+			h = arrow_size,
+			valign = "grow",
+			halign = "grow",
 			color = peer_color,
 			visible = true,
 			layer = 4
 		})
-		dot:set_center(c_x,c_y)
-		local dot_ghost = waypoint_panel:bitmap({
-			name = "dot_ghost",
-			texture = dot_texture,
-			texture_rect = dot_texture_rect,
-			w = dot_size,
-			h = dot_size,
-			x = dot:x(),
-			y = dot:y(),
+		arrow:set_center(c_x,c_y)
+		local arrow_ghost = waypoint_panel:bitmap({
+			name = "arrow_ghost",
+			texture = arrow_texture,
+			texture_rect = arrow_texture_rect,
+			w = arrow_size,
+			h = arrow_size,
+			x = arrow:x(),
+			y = arrow:y(),
+--			valign = "grow",
+--			halign = "grow",
 			color = peer_color,
-			visible = false,
+			alpha = 0,
+			visible = true,
 			layer = 5
 		})
 		
@@ -1613,7 +1618,7 @@ function QuickChat:_AddWaypoint(peer_id,waypoint_data)
 			visible = icon_visible,
 			layer = 1
 		})
-		icon:set_bottom(dot:y())
+		icon:set_bottom(arrow:y())
 		icon:set_center_x(c_x)
 		
 		local font = "fonts/font_medium_shadow_mf"
@@ -1628,7 +1633,7 @@ function QuickChat:_AddWaypoint(peer_id,waypoint_data)
 			layer = 3
 		})
 		if not icon_visible then
-			label:set_y(dot:y() - label_font_size)
+			label:set_y(arrow:y() - label_font_size)
 		end
 		
 		--timer or distance
@@ -1637,7 +1642,7 @@ function QuickChat:_AddWaypoint(peer_id,waypoint_data)
 			text = "TEST2",
 			font = font,
 			font_size = 16,
-			y = dot:bottom() + 4,
+			y = arrow:bottom() + 4,
 			align = "center",
 			vertical = "top",
 			color = peer_color,
@@ -1654,8 +1659,12 @@ function QuickChat:_AddWaypoint(peer_id,waypoint_data)
 			icon = icon,
 			label = label,
 			desc = desc,
+			arrow = arrow,
+			arrow_ghost = arrow_ghost,
+			start_t = waypoint_data.start_t or 0,
 			end_t = end_t,
---			animate_in = true,
+			state = "onscreen",
+			animate_in_duration = _G.sdfasd or 3,
 			waypoint_type = waypoint_data.waypoint_type,
 			unit = waypoint_data.unit,
 			position = waypoint_data.position
@@ -1969,17 +1978,6 @@ function QuickChat:UpdateWaypoints(t,dt)
 			end
 			
 			if is_valid then
-				--[[
-				if waypoint_data.animate_in then
-					local animate_in_duration = 0.5
-					waypoint_data.panel:stop()
-					waypoint_data.panel:animate(function()
-						over(animate_in_duration,function()
-							
-						end)
-					end)
-				end
-				--]]
 				local panel_pos = ws:world_to_screen(viewport_cam,wp_position)
 				local distance = mvec3_distance(camera_position,wp_position)
 				local panel_x,panel_y = panel_pos.x,panel_pos.y
@@ -1999,7 +1997,12 @@ function QuickChat:UpdateWaypoints(t,dt)
 				local hud_direction
 				local c_x = panel_x - pc_x
 				local c_y = panel_y - pc_y
-				if peer_id == 1 and (dot < 0 or parent_panel:outside(panel_x - outer_clamp_x_min,panel_y - outer_clamp_y_min) or parent_panel:outside(panel_x + outer_clamp_x_min,panel_y + outer_clamp_y_min)) then
+				local new_waypoint_state
+				local arrow = waypoint_data.arrow
+				
+				if dot < 0 or parent_panel:outside(panel_x - outer_clamp_x_min,panel_y - outer_clamp_y_min) or parent_panel:outside(panel_x + outer_clamp_x_min,panel_y + outer_clamp_y_min) then
+					new_waypoint_state = "offscreen"
+					
 					local x_r = math.clamp(panel_x,0,pw) / pw
 					local y_r = math.clamp(panel_y,0,ph) / ph
 
@@ -2017,7 +2020,7 @@ function QuickChat:UpdateWaypoints(t,dt)
 					panel_x = pc_x + (outer_clamp_x_max * math.cos(hud_direction) / 2)
 					panel_y = pc_y + (outer_clamp_y_max * math.sin(hud_direction) / 2)
 				else
-					
+					new_waypoint_state = "onscreen"
 					if c_x ~= 0 or c_y ~= 0 then
 						hud_direction = math.atan(c_y/c_x)
 						if c_x > 0 then
@@ -2027,6 +2030,42 @@ function QuickChat:UpdateWaypoints(t,dt)
 					
 --					Console:SetTracker(hud_direction,2)
 				end
+				if new_waypoint_state == "offscreen" then
+					arrow:set_rotation(hud_direction)
+				end
+				if waypoint_data.animate_in_duration then
+					local arrow_ghost = waypoint_data.arrow_ghost
+					if waypoint_data.animate_in_duration > 0 then
+						local start_t = waypoint_data.start_t
+						local arrow_ghost_size = 16
+						local duration = 1
+						local pulse_t = 1 - (math.cos(((game_t - start_t) * 180/duration) % 180)+1) / 2
+	--					local pulse_t = math.sin((game_t- * speed * 90) % 90)
+						local size_scaled = arrow_ghost_size * (1 + pulse_t)
+	--					Console:SetTracker(pulse_t,1)
+	--					Console:SetTracker(scaled,2)
+						arrow_ghost:set_size(size_scaled,size_scaled)
+						arrow_ghost:set_alpha(1 - pulse_t)
+						arrow_ghost:set_center(waypoint_data.panel:w()/2,waypoint_data.panel:h()/2)
+						
+						waypoint_data.animate_in_duration = waypoint_data.animate_in_duration - dt
+					else
+						arrow_ghost:hide()
+						waypoint_data.animate_in_duration = nil
+					end
+				end
+				if new_waypoint_state ~= waypoint_data.state then
+					local arrow_texture,arrow_texture_rect
+					if new_waypoint_state == "offscreen" then
+						arrow_texture,arrow_texture_rect = self:GetIconDataByIndex(24) --arrow
+					elseif new_waypoint_state == "onscreen" then
+						arrow:set_rotation(0)
+						arrow_texture,arrow_texture_rect = self:GetIconDataByIndex(152) --dot
+					end
+					arrow:set_image(arrow_texture,unpack(arrow_texture_rect or {}))
+					waypoint_data.state = new_waypoint_state
+				end
+				
 				waypoint_data.panel:set_center(panel_x,panel_y)
 				waypoint_data.desc:set_text(string.format("%0.1fm",distance / 100))
 			end
