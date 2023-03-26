@@ -1,10 +1,5 @@
 --TODO
 	--[[
-		timers
-		auto icon for units
-		
-		debug mode to draw oobb boxes and casts
-		proximity priority for spherecast
 	--]]
 	
 	--SCHEMA
@@ -19,7 +14,17 @@
 		--offscreen waypoint arrow needs visual adjustment
 			--arrow triangle is too even
 	--FEATURES
-		--look-at waypoint and press button to remove
+	
+		--timers
+		--auto icon for units
+		
+		--inverse alpha attenuation
+		
+		--debug mode to draw oobb boxes and casts
+		--proximity priority for spherecast
+		
+		--sync removal
+			--requires id syncing, which introduces the potential of an 'overflow' type issue
 		--button/keybind to remove all waypoints
 			--remove all waypoints data AND all panel children
 		--compatibility with other waypoint mods
@@ -56,12 +61,23 @@ QuickChat._bindings_name = "bindings_$WRAPPER.json"
 QuickChat._settings_name = "settings.json"
 QuickChat.default_settings = {
 	waypoints_max_count = 1,
-	waypoint_aim_dot_threshold = 0.99
+	waypoints_aim_dot_threshold = 0.99,
+	waypoints_attenuate_alpha_enabled = true,
+	waypoints_attenuate_alpha_dot_threshold = 0.98,
+	waypoints_attenuate_alpha_min = 0.3
 }
+QuickChat.WAYPOINT_ICON_SIZE = 24
+QuickChat.WAYPOINT_ARROW_ICON_SIZE = 16
+QuickChat.WAYPOINT_LABEL_FONT_SIZE = 24
+QuickChat.WAYPOINT_PANEL_SIZE = 100
+QuickChat.WAYPOINT_ANIMATE_FADEIN_DURATION = 3 --pulse for 3 seconds
+
 QuickChat.settings = table.deep_map_copy(QuickChat.default_settings) --general user pref
 QuickChat.sort_settings = {
 	"waypoint_aim_dot_threshold",
-	"waypoints_max_count"
+	"waypoints_max_count",
+	"waypoints_attenuate_alpha_dot_threshold",
+	"waypoints_attenuate_alpha_min"
 }
 QuickChat._bindings = {
 --[[
@@ -1091,8 +1107,20 @@ function QuickChat:GetIconDataByIndex(icon_index)
 end
 
 function QuickChat:GetWaypointAimDotThreshold()
-	return self.settings.waypoint_aim_dot_threshold
+	return self.settings.waypoints_aim_dot_threshold
 end	
+
+function QuickChat:GetWaypointAttenuateDotThreshold()
+	return self.settings.waypoints_attenuate_alpha_dot_threshold
+end
+
+function QuickChat:GetWaypointAttenuateAlphaMin()
+	return self.settings.waypoints_attenuate_alpha_min
+end
+
+function QuickChat:IsWaypointAttenuateAlphaEnabled()
+	return self.settings.waypoints_attenuate_alpha_enabled
+end
 
 --Setup
 
@@ -1444,6 +1472,7 @@ function QuickChat:AddWaypoint(params)
 		raycast = World:raycast("ray",cam_pos,to_pos,"slot_mask",self._waypoint_target_slotmask) or {}
 	else
 		--cylinder cast
+		--not implemented
 		raycast = nil
 	end
 	if raycast and raycast.position then
@@ -1649,11 +1678,11 @@ function QuickChat:_AddWaypoint(peer_id,waypoint_data)
 	local peer_color = tweak_data.chat_colors[peer_id]
 	local parent_panel = self._parent_panel
 	if alive(parent_panel) then 
-		
+		local waypoint_panel_size = self.WAYPOINT_PANEL_SIZE
 		local waypoint_panel = parent_panel:panel({
 			name = "panel",
-			w = 100,
-			h = 100,
+			w = waypoint_panel_size,
+			h = waypoint_panel_size,
 			valign = "grow",
 			halign = "grow",
 			visible = true,
@@ -1676,10 +1705,10 @@ function QuickChat:_AddWaypoint(peer_id,waypoint_data)
 		local label_id = label_index and self._label_presets[label_index]
 		local label_text = label_id and managers.localization:text(label_id)
 		
-		local icon_size = 24
-		local arrow_size = 16
-		local label_font_size = 24
-		local arrow_texture,arrow_texture_rect = self:GetIconDataByIndex(152)
+		local icon_size = self.WAYPOINT_ICON_SIZE
+		local arrow_size = self.WAYPOINT_ARROW_ICON_SIZE
+		local label_font_size = self.WAYPOINT_LABEL_FONT_SIZE
+		local arrow_texture,arrow_texture_rect = self:GetIconDataByIndex(152) --circle
 		local arrow = waypoint_panel:bitmap({
 			name = "arrow",
 			texture = arrow_texture,--"guis/textures/pd2/progress_reload",
@@ -1779,7 +1808,7 @@ function QuickChat:_AddWaypoint(peer_id,waypoint_data)
 			start_t = waypoint_data.start_t or TimerManager:game():time(),
 			end_t = end_t,
 			state = "onscreen",
-			animate_in_duration = 3,
+			animate_in_duration = self.WAYPOINT_ANIMATE_FADEIN_DURATION,
 			waypoint_type = waypoint_data.waypoint_type,
 			unit = unit,
 			unit_object = object,
@@ -2125,14 +2154,20 @@ function QuickChat:UpdateWaypoints(t,dt)
 	
 	local pc_x,pc_y = parent_panel:center()
 	local pw,ph = parent_panel:size()
-	local outer_clamp_x_min = 0 + 100/2
-	local outer_clamp_x_max = pw - (100/2)
-	local outer_clamp_y_min = 0 + 100/2
-	local outer_clamp_y_max = ph - (100/2)
+	local waypoint_panel_size = self.WAYPOINT_PANEL_SIZE
+	local outer_clamp_x_min = 0 + waypoint_panel_size/2
+	local outer_clamp_x_max = pw - (waypoint_panel_size/2)
+	local outer_clamp_y_min = 0 + waypoint_panel_size/2
+	local outer_clamp_y_max = ph - (waypoint_panel_size/2)
 	local camera_position = managers.viewport:get_current_camera_position()
 	local camera_rotation = managers.viewport:get_current_camera_rotation()
 	
 	mrot_y(camera_rotation,tmp_cam_fwd)
+	
+	local waypoint_attenuate_alpha_enabled = self:IsWaypointAttenuateAlphaEnabled()
+	local waypoint_attenuate_alpha_min = self:GetWaypointAttenuateAlphaMin()
+	local waypoint_attenuate_dot_threshold = self:GetWaypointAttenuateDotThreshold()
+	
 --	local player = managers.player:local_player()
 	for peer_id,peer_data in pairs(self._synced_waypoints) do 
 		for waypoint_id=#peer_data,1,-1 do 
@@ -2238,6 +2273,18 @@ function QuickChat:UpdateWaypoints(t,dt)
 				end
 				if new_waypoint_state == "offscreen" then
 					arrow:set_rotation(hud_direction)
+				elseif new_waypoint_state == "onscreen" then
+					if waypoint_attenuate_alpha_enabled then
+						local dot_alpha,d_dot
+						if dot > waypoint_attenuate_dot_threshold then
+							d_dot = dot - waypoint_attenuate_dot_threshold
+							dot_alpha = math.max(1-(d_dot/(1-waypoint_attenuate_dot_threshold)),waypoint_attenuate_alpha_min)
+						else
+							dot_alpha = 1
+						end
+--						Console:SetTracker(string.format("%0.5f / %0.2f / %0.2f",dot,d_dot or -1,dot_alpha),1)
+						waypoint_data.panel:set_alpha(dot_alpha)
+					end
 				end
 				if waypoint_data.animate_in_duration then
 					local arrow_ghost = waypoint_data.arrow_ghost
@@ -2262,6 +2309,7 @@ function QuickChat:UpdateWaypoints(t,dt)
 					if new_waypoint_state == "offscreen" then
 						arrow_texture,arrow_texture_rect = self:GetIconDataByIndex(24) --arrow
 					elseif new_waypoint_state == "onscreen" then
+						waypoint_data.panel:set_alpha(1)
 						arrow:set_rotation(0)
 						arrow_texture,arrow_texture_rect = self:GetIconDataByIndex(152) --dot
 					end
