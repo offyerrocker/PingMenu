@@ -1,4 +1,13 @@
 --TODO
+	--[[
+		ping corpses
+		timers
+		adjust placement for units
+		pingable other unit types(deployables)
+		auto icon for units
+		
+	--]]
+	
 	--SCHEMA
 		--todo use _supported_controller_type_map instead of manual mapping?
 			--may not be necessary if only the wrapper type is used
@@ -28,9 +37,12 @@
 		--localize menu button names for controllers, per gamepad type
 		--allow selecting button by waiting at menu (for controllers) for x seconds
 			--(this allows controllers to bind or reserve any options they desire, without interfering with menu operation)
-		
+		--remove waypoints on death?
 	
 	--BUGS
+		--QuickChat detects controller mode if a controller is plugged in, even if keyboard is the "main" input
+		--character unit waypoints are in an unexpected place; move above head instead
+			--probably involves differently sized waypoint panels
 		--squish squash, no bugs here, only crimson flowers
 
 QuickChat = QuickChat or {
@@ -44,10 +56,12 @@ QuickChat._save_layouts_path = QuickChat._save_path .. "layouts/"
 QuickChat._bindings_name = "bindings_$WRAPPER.json"
 QuickChat._settings_name = "settings.json"
 QuickChat.default_settings = {
-	waypoints_max_count = 1
+	waypoints_max_count = 1,
+	waypoint_aim_dot_threshold = 0.99
 }
 QuickChat.settings = table.deep_map_copy(QuickChat.default_settings) --general user pref
 QuickChat.sort_settings = {
+	"waypoint_aim_dot_threshold",
 	"waypoints_max_count"
 }
 QuickChat._bindings = {
@@ -60,6 +74,7 @@ QuickChat._bindings = {
 QuickChat.SYNC_MESSAGE_PRESET = "QuickChat_message_preset"
 QuickChat.SYNC_MESSAGE_REGISTER = "QuickChat_Register"
 QuickChat.SYNC_MESSAGE_WAYPOINT_ADD = "QuickChat_SendWaypoint"
+QuickChat.SYNC_MESSAGE_WAYPOINT_REMOVE = "QuickChat_RemoveWaypoint"
 QuickChat.API_VERSION = "2" -- string!
 QuickChat.WAYPOINT_RAYCAST_DISTANCE = 250000 --250m
 QuickChat.WAYPOINT_SECONDARY_CAST_RADIUS = 50 --50cm
@@ -995,10 +1010,18 @@ do --load Lua ini Parser
 end
 
 local mvec3_distance = mvector3.distance
+local mvec3_dot = mvector3.dot
+local mvec3_sub = mvector3.subtract
+local mvec3_set = mvector3.set
+local mvec3_dot = mvector3.dot
+local mvec3_normalize = mvector3.normalize
+local mrot_y = mrotation.y
 
 function QuickChat:Log(msg)
 	if Console then
 		Console:Log(msg)
+	else
+		log(msg)
 	end
 end
 
@@ -1018,6 +1041,10 @@ function QuickChat:GetIconDataByIndex(icon_index)
 		end
 	end
 end
+
+function QuickChat:GetWaypointAimDotThreshold()
+	return self.settings.waypoint_aim_dot_threshold
+end	
 
 --Setup
 
@@ -1337,13 +1364,23 @@ end
 
 --Waypoints
 function QuickChat:AddWaypoint(params)
-	params = params or {}
 	
 	local viewport_cam = managers.viewport:get_current_camera()
 	if not viewport_cam then 
 		--doesn't typically happen, usually for only a brief moment when all four players go into custody
 		return 
 	end
+	
+	local peer_id = managers.network:session():local_peer():id()
+	params = params or {}
+	
+	local dot_aim_threshold = self:GetWaypointAimDotThreshold()
+	local aimed_index,aimed_wp_data = self:GetAimedWaypoint(true,dot_aim_threshold)
+	if aimed_index then
+		self:RemoveWaypoint(peer_id,aimed_index)
+		return
+	end
+	
 	local cam_pos = viewport_cam:position()
 	local cam_aim = viewport_cam:rotation():y()
 	
@@ -1414,6 +1451,15 @@ function QuickChat:AddWaypoint(params)
 			local waypoint_type
 			local _unit_id,unit_id
 			if alive(unit_result) then
+				
+				for i,waypoint_data in ipairs(self._synced_waypoints[peer_id]) do 
+					if waypoint_data.unit == unit_result then
+						self:RemoveWaypoint(peer_id,i)
+						return
+					end
+				end
+				
+				
 				--check if valid unit
 				_unit_id = unit:id()
 			end
@@ -1425,6 +1471,8 @@ function QuickChat:AddWaypoint(params)
 				--create waypoint at position
 				waypoint_type = self.WAYPOINT_TYPES.POSITION
 			end
+			
+			
 			
 --			local peer_id = managers.network:session():local_peer():id()
 --			local peer_color = tweak_data.chat_colors[peer_id]
@@ -1438,7 +1486,6 @@ function QuickChat:AddWaypoint(params)
 				unit_id = unit_id,
 				unit = unit_result
 			}
-			local peer_id = managers.network:session():local_peer():id()
 			
 			self:_SendWaypoint(waypoint_data)
 			self:_AddWaypoint(peer_id,waypoint_data)
@@ -1474,7 +1521,7 @@ function QuickChat:_SendWaypoint(waypoint_data)
 			pos.z
 		)
 	elseif waypoint_type == self.WAYPOINT_TYPES.UNIT then
-		sync_string = string.format("%i;%i;%i;%i;%i;%i;%i;%i",
+		sync_string = string.format("%i;%i;%i;%s;%i;%i;%i;%i",
 			waypoint_type,
 			label_index,
 			icon_index,
@@ -1487,7 +1534,7 @@ function QuickChat:_SendWaypoint(waypoint_data)
 	end
 	
 	if sync_string then
---		self:Log(sync_string) --!
+		self:Log(sync_string) --!
 
 		local API_VERSION = self.API_VERSION
 		for _,peer in pairs(managers.network:session():peers()) do 
@@ -1530,16 +1577,17 @@ function QuickChat:ReceiveWaypoint(peer_id,message_string)
 				start_t = start_t,
 				end_t = end_t,
 				position = position,
-				unit = unit_result
+				unit = nil
 			})
-		elseif type_id == self.WAYPOINT_TYPES.UNIT then
+		elseif waypoint_type == self.WAYPOINT_TYPES.UNIT then
 			local unit_id = to_int(data[8])
 			local unit_result
 			if unit_id > 0 then
 				--cheat the networking a little bit; 
 				--syncing units directly without using the built-in network extensions is a challenge
 				--but hypothetically, most units should probably be well within this distance at the time of receiving the waypoint message
-				local near_units = World:find_units_quick("sphere",position,self.WAYPOINT_RAYCAST_DISTANCE / 2,1)
+				local slot_mask = managers.slot:get_mask("all") + managers.slot:get_mask("persons") + managers.slot:get_mask("pickups")
+				local near_units = World:find_units_quick("sphere",position,self.WAYPOINT_RAYCAST_DISTANCE / 2,slot_mask)
 				for _,unit in pairs(near_units) do 
 					if unit:id() == unit_id then
 						unit_result = unit
@@ -1561,6 +1609,10 @@ function QuickChat:ReceiveWaypoint(peer_id,message_string)
 			})
 		end
 	end
+end
+
+function QuickChat:RemoveWaypointFromPeer(peer_id,message_string)
+	
 end
 
 function QuickChat:_AddWaypoint(peer_id,waypoint_data)
@@ -1675,7 +1727,7 @@ function QuickChat:_AddWaypoint(peer_id,waypoint_data)
 		local current_num_waypoints = #peer_waypoints
 		local max_num_waypoints = self:GetMaxNumWaypoints()
 		if current_num_waypoints >= max_num_waypoints then
-			self:RemoveWaypoint(peer_id,1)
+			self:_RemoveWaypoint(peer_id,1)
 		end
 		local new_waypoint = {
 			panel = waypoint_panel,
@@ -1699,7 +1751,12 @@ function QuickChat:_AddWaypoint(peer_id,waypoint_data)
 	end
 end
 
-function QuickChat:RemoveWaypoint(peer_id,waypoint_index)
+function QuickChat:RemoveWaypoint(peer_id,waypoint_index) --from local player
+	self:_RemoveWaypoint(peer_id,waypoint_index)
+--	LuaNetworking:SendToPeers(self.SYNC_MESSAGE_WAYPOINT_REMOVE,"remove")
+end
+
+function QuickChat:_RemoveWaypoint(peer_id,waypoint_index)
 	local peer_waypoints = peer_id and self._synced_waypoints[peer_id]
 	if peer_waypoints and waypoint_index then
 		local waypoint_data = table.remove(peer_waypoints,waypoint_index)
@@ -1724,6 +1781,51 @@ function QuickChat:DisposeWaypoints(peer_id)
 				waypoint_data.panel:parent():remove(waypoint_data.panel)
 			end
 		end
+	end
+end
+
+--gets the waypoint that the player is looking at, if any
+--can only select waypoints placed by self
+local tmp_wp_dir = Vector3()
+function QuickChat:GetAimedWaypoint(force_recalculate,dot_threshold)
+	local camera_position = managers.viewport:get_current_camera_position()
+	local camera_rotation = managers.viewport:get_current_camera_rotation()
+	local cam_dir = camera_rotation:y()
+	local peer_id = managers.network:session():local_peer():id()
+	local best_dot = dot_threshold or -1
+	local best_index
+	local waypoints = self._synced_waypoints[peer_id]
+	for i,waypoint_data in ipairs(waypoints) do 
+		local dot = waypoint_data.last_dot
+		if force_recalculate or not dot then
+			if waypoint_data.waypoint_type == self.WAYPOINT_TYPES.UNIT then
+				local unit = waypoint_data.unit
+				if alive(unit) then
+					local unit_pos = unit:position()
+					mvec3_set(tmp_wp_dir,unit_pos)
+					mvec3_sub(tmp_wp_dir,camera_position)
+					mvec3_normalize(tmp_wp_dir)
+--					local tmp_wp_dir = unit_pos - camera_position
+					dot = mvec3_dot(cam_dir,tmp_wp_dir)
+				end
+			elseif waypoint_data.waypoint_type == self.WAYPOINT_TYPES.POSITION then
+				local position = waypoint_data.position
+				mvec3_set(tmp_wp_dir,position)
+				mvec3_sub(tmp_wp_dir,camera_position)
+				mvec3_normalize(tmp_wp_dir)
+--				local tmp_wp_dir = position - camera_position
+				dot = mvec3_dot(cam_dir,tmp_wp_dir)
+			else
+				--invalid data
+			end
+		end
+		if dot and dot > best_dot then
+			best_dot = dot
+			best_index = i
+		end
+	end
+	if best_index then
+		return best_index,waypoints[best_index]
 	end
 end
 
@@ -1825,10 +1927,12 @@ end
 
 function QuickChat:AddControllerInputListener() --only for rebinding
 	self:AddUpdater("quickchat_update_rebinding",callback(self,self,"UpdateRebindingListener"),true)
+--	self:Log("QuickChat: Adding listener for " .. tostring(self:GetController()) .. ", gamepad mode " .. tostring(self:IsGamepadModeEnabled()))
 end
 
 function QuickChat:RemoveControllerInputListener() --only for rebinding
 	self:RemoveUpdater("quickchat_update_rebinding")
+--	self:Log("QuickChat: Rebinding listener removed.")
 end
 
 function QuickChat:UpdateRebindingListener(t,dt)
@@ -1965,10 +2069,6 @@ function QuickChat:UpdateGame(t,dt)
 	self:UpdateWaypoints(t,dt)
 end
 
-local mrot_y = mrotation.y
-local mvec3_dot = mvector3.dot
-local mvec3_normalize = mvector3.normalize
-
 local tmp_cam_fwd = Vector3()
 function QuickChat:UpdateWaypoints(t,dt)	
 	local game_t = TimerManager:game():time()
@@ -2005,7 +2105,7 @@ function QuickChat:UpdateWaypoints(t,dt)
 				if remaining_t <= 0 then
 					--expire
 					is_valid = false
-					self:RemoveWaypoint(peer_id,waypoint_id)
+					self:_RemoveWaypoint(peer_id,waypoint_id)
 				else
 					waypoint_data.desc:set_text(string.format("%0.1f",remaining_t))
 				end
@@ -2018,7 +2118,7 @@ function QuickChat:UpdateWaypoints(t,dt)
 						wp_position = oobb and oobb:center() or unit:position() or wp_position
 					else
 						--expire (unit dead/despawned or otherwise invalid)
-						self:RemoveWaypoint(peer_id,waypoint_id)
+						self:_RemoveWaypoint(peer_id,waypoint_id)
 						is_valid = false
 					end
 				else
@@ -2269,6 +2369,7 @@ Hooks:Add("MenuManagerPopulateCustomMenus","QuickChat_MenuManagerPopulateCustomM
 			
 			--called on pressing a button in the bind dialog
 			QuickChat._callback_bind_button = function(self,button_name)
+--				self:Log("QuickChat: Found button " .. tostring(button_name))
 				if self._quickmenu_item then 
 					self._quickmenu_item:Hide()
 					self._quickmenu_item = nil
@@ -2371,6 +2472,8 @@ Hooks:Add("NetworkReceivedData","QuickChat_NetworkReceivedData",function(sender,
 		QuickChat:ReceivePresetMessage(sender,message_body)
 	elseif message_id == QuickChat.SYNC_MESSAGE_WAYPOINT_ADD then
 		QuickChat:ReceiveWaypoint(sender,message_body)
+	elseif message_id == QuickChat.SYNC_MESSAGE_WAYPOINT_REMOVE then
+		QuickChat:RemoveWaypointFromPeer(sender,message_body)
 	elseif message_id == QuickChat.SYNC_MESSAGE_REGISTER then
 		QuickChat:RegisterPeerById(sender,message_body)
 	end
