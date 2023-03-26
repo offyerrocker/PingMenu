@@ -79,6 +79,27 @@ QuickChat.API_VERSION = "2" -- string!
 QuickChat.WAYPOINT_RAYCAST_DISTANCE = 250000 --250m
 QuickChat.WAYPOINT_SECONDARY_CAST_RADIUS = 50 --50cm
 
+--these are objects picked up by the raycast,
+--not necessarily objects selected as a waypoint's unit target
+--waypoint's unit targets can only be characters (persons; teammate ai, teammate players, civilians, or enemies)
+QuickChat.WAYPOINT_TARGET_CAST_TYPES = {
+	1, --all (includes equipment)
+	2,4, --ai teammates (if host) (needs testing)
+	3,5, --teammates
+	8, --enemy shield props (when attached)
+	11, --world geometry (not unit targetable)
+	14, --standard deployables
+	16,25, --criminals, including sentrygun
+	17, --corpses
+	20,23,--pickups
+	21, --civilians
+	22, --hostages
+	26, --sentry gun
+	12,33,--enemies
+	39 --vehicles
+}
+QuickChat._waypoint_target_slotmask = nil --generated on setup
+
 QuickChat.WAYPOINT_TYPES = {
 	POSITION = 1,
 	UNIT = 2
@@ -1017,6 +1038,30 @@ local mvec3_dot = mvector3.dot
 local mvec3_normalize = mvector3.normalize
 local mrot_y = mrotation.y
 
+function QuickChat.find_interactable(unit)
+	if unit.interaction then 
+		if unit:interaction() and not unit:interaction()._disabled and unit:interaction()._active then
+			--look for any interactable object
+			--not just any objects with an interaction extension- 
+			--must be active and currently interactable
+		
+--				self:log("active=" .. tostring(unit:interaction()._active) .. ",disabled=".. tostring(unit:interaction()._disabled))
+			return unit
+		end
+	end
+end
+
+function QuickChat.find_character(unit,no_recursion)
+	if alive(unit) then
+		if not no_recursion and unit:in_slot(8) and unit.parent and unit:parent() then 
+			return QuickChat.find_character(unit:parent(),true)
+		elseif unit.character_damage and unit:character_damage() then
+			return unit
+--		elseif unit:parent() and alive(unit:parent():base()) and unit:parent():base().tweak_table then 
+		end
+	end
+end
+
 function QuickChat:Log(msg)
 	if Console then
 		Console:Log(msg)
@@ -1049,6 +1094,9 @@ end
 --Setup
 
 function QuickChat:Setup() --on game setup complete
+	
+	self._waypoint_target_slotmask = World:make_slot_mask(unpack(self.WAYPOINT_TARGET_CAST_TYPES))
+	
 	self:PopulateInputCache()
 	if managers.hud then
 		local ws = managers.hud._saferect
@@ -1390,7 +1438,7 @@ function QuickChat:AddWaypoint(params)
 	
 	local raycast
 	if mode == 1 then --precise raycast
-		raycast = World:raycast("ray",cam_pos,to_pos,"slot_mask",managers.slot:get_mask("bullet_impact_targets")) or {}
+		raycast = World:raycast("ray",cam_pos,to_pos,"slot_mask",self._waypoint_target_slotmask) or {}
 	else
 		--cylinder cast
 		raycast = nil
@@ -1406,90 +1454,70 @@ function QuickChat:AddWaypoint(params)
 		local label_index = params.label_index or 0
 		local icon_index = params.icon_index or 0
 		
+		
+		local find_interactable = self.find_interactable
+		local find_character = self.find_character
+		
 		if unit then
-			local function find_interactable(this_unit)
-				if this_unit.interaction then 
-					if this_unit:interaction() and not this_unit:interaction()._disabled and this_unit:interaction()._active then
-						--look for any interactable object
-						--not just any objects with an interaction extension- 
-						--must be active and currently interactable
-					
-		--				self:log("active=" .. tostring(this_unit:interaction()._active) .. ",disabled=".. tostring(this_unit:interaction()._disabled))
-						return this_unit
-					end
-				end
-			end
-			
-			local function find_character(this_unit,no_further)
-				if alive(this_unit) then
-					if not no_further and this_unit:in_slot(8) and this_unit.parent and this_unit:parent() then 
-						return find_character(this_unit:parent(),true)
-					elseif this_unit.character_damage and this_unit:character_damage() and not this_unit:character_damage():dead() then
-						return this_unit
-			--		elseif this_unit:parent() and alive(this_unit:parent():base()) and this_unit:parent():base().tweak_table then 
-					end
-				end
-			end
-			
 			if unit and alive(unit) then 
 				unit_result = find_character(unit) or find_interactable(unit)
 			end
-			
-			if not unit_result then
-				--do secondary sphere cast to catch interactables specifically
-				local spherecast = World:find_units_quick("sphere",position,self.WAYPOINT_SECONDARY_CAST_RADIUS,1)
-				for _,_unit in ipairs(spherecast) do 
-					local found_interactable = find_interactable(_unit)
-					if found_interactable then
-						unit_result = found_interactable
-						break
-					end
+		end
+		
+		if not unit_result then
+			--do secondary sphere cast to catch interactables specifically
+			local spherecast = World:find_units_quick("sphere",position,self.WAYPOINT_SECONDARY_CAST_RADIUS,self._waypoint_target_slotmask)
+			for _,_unit in ipairs(spherecast) do 
+				--secondary (spherecast) targets should prioritize objects instead of people
+				local found_interactable = find_interactable(_unit) or find_character(unit)
+				if found_interactable then
+					unit_result = found_interactable
+					break
 				end
-				
 			end
+		
+		end
+		
+		local waypoint_type
+		local _unit_id,unit_id
+		if alive(unit_result) then
 			
-			local waypoint_type
-			local _unit_id,unit_id
-			if alive(unit_result) then
-				
-				for i,waypoint_data in ipairs(self._synced_waypoints[peer_id]) do 
-					if waypoint_data.unit == unit_result then
-						self:RemoveWaypoint(peer_id,i)
-						return
-					end
+			for i,waypoint_data in ipairs(self._synced_waypoints[peer_id]) do 
+				if waypoint_data.unit == unit_result then
+					self:RemoveWaypoint(peer_id,i)
+					return
 				end
-				
-				
-				--check if valid unit
-				_unit_id = unit:id()
-			end
-			if _unit_id and _unit_id > 0 then	
-				--attach waypoint to unit
-				waypoint_type = self.WAYPOINT_TYPES.UNIT
-				unit_id = _unit_id
-			else
-				--create waypoint at position
-				waypoint_type = self.WAYPOINT_TYPES.POSITION
 			end
 			
-			
-			
+			--check if valid unit
+			_unit_id = unit_result:id()
+		end
+		if _unit_id and _unit_id > 0 then	
+			--attach waypoint to unit
+			waypoint_type = self.WAYPOINT_TYPES.UNIT
+			unit_id = _unit_id
+		else
+			--create waypoint at position
+			waypoint_type = self.WAYPOINT_TYPES.POSITION
+		end
+		
+		
+		
 --			local peer_id = managers.network:session():local_peer():id()
 --			local peer_color = tweak_data.chat_colors[peer_id]
-			local waypoint_data = {
-				waypoint_type = waypoint_type,
-				icon_index = icon_index,
-				label_index = label_index,
-				start_t = TimerManager:game():time(),
-				end_t = end_t,
-				position = position,
-				unit_id = unit_id,
-				unit = unit_result
-			}
-			
-			self:_SendWaypoint(waypoint_data)
-			self:_AddWaypoint(peer_id,waypoint_data)
-		end
+		local waypoint_data = {
+			waypoint_type = waypoint_type,
+			icon_index = icon_index,
+			label_index = label_index,
+			start_t = TimerManager:game():time(),
+			end_t = end_t,
+			position = position,
+			unit_id = unit_id,
+			unit = unit_result
+		}
+		
+		self:_SendWaypoint(waypoint_data)
+		self:_AddWaypoint(peer_id,waypoint_data)
 	end
 	
 end
@@ -1586,7 +1614,7 @@ function QuickChat:ReceiveWaypoint(peer_id,message_string)
 				--cheat the networking a little bit; 
 				--syncing units directly without using the built-in network extensions is a challenge
 				--but hypothetically, most units should probably be well within this distance at the time of receiving the waypoint message
-				local slot_mask = managers.slot:get_mask("all") + managers.slot:get_mask("persons") + managers.slot:get_mask("pickups")
+				local slot_mask = self._waypoint_target_slotmask
 				local near_units = World:find_units_quick("sphere",position,self.WAYPOINT_RAYCAST_DISTANCE / 2,slot_mask)
 				for _,unit in pairs(near_units) do 
 					if unit:id() == unit_id then
