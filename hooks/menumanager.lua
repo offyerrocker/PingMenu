@@ -1,11 +1,10 @@
 --TODO
 	--[[
-		ping corpses
 		timers
-		adjust placement for units
-		pingable other unit types(deployables)
 		auto icon for units
 		
+		debug mode to draw oobb boxes and casts
+		proximity priority for spherecast
 	--]]
 	
 	--SCHEMA
@@ -78,7 +77,10 @@ QuickChat.SYNC_MESSAGE_WAYPOINT_REMOVE = "QuickChat_RemoveWaypoint"
 QuickChat.API_VERSION = "2" -- string!
 QuickChat.WAYPOINT_RAYCAST_DISTANCE = 250000 --250m
 QuickChat.WAYPOINT_SECONDARY_CAST_RADIUS = 50 --50cm
-
+QuickChat.WAYPOINT_OBJECT_PRIORITY_LIST = {
+	"Head",
+	"Neck"
+}
 --these are objects picked up by the raycast,
 --not necessarily objects selected as a waypoint's unit target
 --waypoint's unit targets can only be characters (persons; teammate ai, teammate players, civilians, or enemies)
@@ -1040,7 +1042,8 @@ local mrot_y = mrotation.y
 
 function QuickChat.find_interactable(unit)
 	if unit.interaction then 
-		if unit:interaction() and not unit:interaction()._disabled and unit:interaction()._active then
+		local interaction_ext = unit:interaction()
+		if interaction_ext and not interaction_ext:disabled() and interaction_ext:active() then
 			--look for any interactable object
 			--not just any objects with an interaction extension- 
 			--must be active and currently interactable
@@ -1443,10 +1446,10 @@ function QuickChat:AddWaypoint(params)
 		--cylinder cast
 		raycast = nil
 	end
-	if raycast then
+	if raycast and raycast.position then
+		local position = raycast.position
 		local unit_result
 		local unit = raycast.unit
-		local position = raycast.position
 		local end_t
 		if params.timer and params.timer > 0 then
 			end_t = TimerManager:game():time() + params.timer
@@ -1501,10 +1504,6 @@ function QuickChat:AddWaypoint(params)
 			waypoint_type = self.WAYPOINT_TYPES.POSITION
 		end
 		
-		
-		
---			local peer_id = managers.network:session():local_peer():id()
---			local peer_color = tweak_data.chat_colors[peer_id]
 		local waypoint_data = {
 			waypoint_type = waypoint_type,
 			icon_index = icon_index,
@@ -1664,14 +1663,13 @@ function QuickChat:_AddWaypoint(peer_id,waypoint_data)
 		local c_x,c_y = waypoint_panel:center()
 		
 		local debug_rect = waypoint_panel:rect({
-			name="",
+			name="debug_rect",
 			color=Color.red,
 			valign="grow",
 			halign="grow",
 			alpha=0.2,
 			visible = false
 		})
-		
 		
 		local texture,texture_rect = self:GetIconDataByIndex(icon_index)
 		local icon_visible = texture and true or false
@@ -1757,6 +1755,20 @@ function QuickChat:_AddWaypoint(peer_id,waypoint_data)
 		if current_num_waypoints >= max_num_waypoints then
 			self:_RemoveWaypoint(peer_id,1)
 		end
+		local unit = waypoint_data.unit
+		local object
+		if alive(unit) then
+			local _object
+			for _,object_name in ipairs(self.WAYPOINT_OBJECT_PRIORITY_LIST) do 
+				_object = unit:get_object(Idstring(object_name))
+				--if necessary, can get the orientation object with Unit:orientation_object(), or the body for an object with Unit:body(Object3D)
+				if _object then
+					object = _object
+					break
+				end
+			end
+		end
+		
 		local new_waypoint = {
 			panel = waypoint_panel,
 			icon = icon,
@@ -1769,7 +1781,8 @@ function QuickChat:_AddWaypoint(peer_id,waypoint_data)
 			state = "onscreen",
 			animate_in_duration = 3,
 			waypoint_type = waypoint_data.waypoint_type,
-			unit = waypoint_data.unit,
+			unit = unit,
+			unit_object = object,
 			position = waypoint_data.position
 --			params = waypoint_data
 		}
@@ -2142,8 +2155,24 @@ function QuickChat:UpdateWaypoints(t,dt)
 				if waypoint_type == self.WAYPOINT_TYPES.UNIT then
 					local unit = waypoint_data.unit
 					if alive(unit) then
-						local oobb = unit:oobb()
-						wp_position = oobb and oobb:center() or unit:position() or wp_position
+						local interaction_ext = unit:interaction()
+						local is_interactable
+						if interaction_ext then
+							if interaction_ext:active() and not interaction_ext:disabled() then
+								is_interactable = true
+								wp_position = interaction_ext:interact_position() or wp_position
+							end
+						end
+						
+						if not is_interactable then
+							local oobb
+							if waypoint_data.unit_object then
+								oobb = waypoint_data.unit_object:oobb()
+							else
+								oobb = unit:oobb()
+							end
+							wp_position = oobb and oobb:center() or unit:position() or wp_position
+						end
 					else
 						--expire (unit dead/despawned or otherwise invalid)
 						self:_RemoveWaypoint(peer_id,waypoint_id)
