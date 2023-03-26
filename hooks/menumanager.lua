@@ -1,7 +1,5 @@
 --TODO
-	--[[
-	--]]
-	
+
 	--SCHEMA
 		--todo use _supported_controller_type_map instead of manual mapping?
 			--may not be necessary if only the wrapper type is used
@@ -13,8 +11,12 @@
 			--number of pulses should be saved in settings
 		--offscreen waypoint arrow needs visual adjustment
 			--arrow triangle is too even
+		
+		--waypoint distance from player instead of camera?
 	--FEATURES
-	
+		--built-in cooldown on text chats (locally enforced only)
+		--feedback on waypoint placement fail
+		--do not send text on waypoint placement fail
 		--timers
 		--auto icon for units
 		
@@ -42,6 +44,9 @@
 		--allow selecting button by waiting at menu (for controllers) for x seconds
 			--(this allows controllers to bind or reserve any options they desire, without interfering with menu operation)
 		--remove waypoints on death?
+			--edge case where you want to keep the body marked after death is out of scope
+				--in this case, players should simply re-mark the body after death
+				--or i guess i could make a setting for that
 	
 	--BUGS
 		--QuickChat detects controller mode if a controller is plugged in, even if keyboard is the "main" input
@@ -2183,7 +2188,7 @@ function QuickChat:UpdateWaypoints(t,dt)
 					is_valid = false
 					self:_RemoveWaypoint(peer_id,waypoint_id)
 				else
-					waypoint_data.desc:set_text(string.format("%0.1f",remaining_t))
+					waypoint_data.desc:set_text(string.format("%0.1fs",remaining_t))
 				end
 			else
 				local waypoint_type = waypoint_data.waypoint_type
@@ -2216,11 +2221,15 @@ function QuickChat:UpdateWaypoints(t,dt)
 				else
 					--is position based (wp_position is already set by default)
 				end
+
+				if is_valid then
+					local distance = mvec3_distance(camera_position,wp_position)
+					waypoint_data.desc:set_text(string.format("%0.1fm",distance / 100))
+				end
 			end
 			
 			if is_valid then
 				local panel_pos = ws:world_to_screen(viewport_cam,wp_position)
-				local distance = mvec3_distance(camera_position,wp_position)
 				local panel_x,panel_y = panel_pos.x,panel_pos.y
 				
 				
@@ -2316,9 +2325,7 @@ function QuickChat:UpdateWaypoints(t,dt)
 					arrow:set_image(arrow_texture,unpack(arrow_texture_rect or {}))
 					waypoint_data.state = new_waypoint_state
 				end
-				
 				waypoint_data.panel:set_center(panel_x,panel_y)
-				waypoint_data.desc:set_text(string.format("%0.1fm",distance / 100))
 			end
 		end
 	end
