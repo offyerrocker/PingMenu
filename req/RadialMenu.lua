@@ -284,6 +284,7 @@ function RadialMenuDialog:recreate_gui()
 		color = Color.white,
 		halign = "grow",
 		valign = "grow",
+		visible = false, --shown later
 		layer = 5
 	})
 	local c_x,c_y = panel:center()
@@ -706,17 +707,18 @@ function RadialMenuDialog:show()
 end	
 
 function RadialMenuDialog:hide(select_current)
-	if select_current then
-		local index = self:get_selected_index()
-		if index then
+	local index = self:get_selected_index()
+	if index then
+		if select_current then
 			self:_callback_item_confirmed(index,self._items[index])
-			self:on_mouseover_item(nil,index)
-		else
-			self:callback_on_cancelled()
 		end
+		self:on_mouseover_item(nil,index)
 		self:clear_selected_index()
 		self:set_mouseover_text("")
+	else
+		self:callback_on_cancelled()
 	end
+	
 	self:set_input_enabled(false)
 	self._panel:hide()
 	self.is_active = false
