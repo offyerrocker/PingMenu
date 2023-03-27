@@ -20,25 +20,24 @@
 		
 		--proximity priority for spherecast
 	--FEATURES
+		--voicelines
+		--fp redirect anims
+		
+		--linger time for timer waypoints
 		--button/keybind to remove all waypoints
 			--remove all waypoints data AND all panel children
 		
 		--honey badger mode- barrel through and send that goddamned waypoint no matter what
 			--especially useful for gcw compatibility
 			
-		--autotranslate icon for pretranslated messages in chat
-		--normal surface plane for area markers
-		--"acknowledged" prompt and popup
 		--subtle light glow at waypoint area
 		--built-in cooldown on text chats (locally enforced only)
 		--feedback on waypoint placement fail
 		--auto icon for units
+			--by interaction id; only in neutral ping
 		
 		--inverse alpha attenuation
 		
-		--compatibility with other waypoint mods
-			--goonmod's custom waypoints. that's it really
-			--does tdlq's version change compatibility with og gcw?
 		--allow raycasting teammates (ai or players)
 		--allow mouse button binding for keyboard users
 			
@@ -54,17 +53,26 @@
 			--edge case where you want to keep the body marked after death is out of scope
 				--in this case, players should simply re-mark the body after death
 				--or i guess i could make a setting for that
-	
+	--ASSETS
+		
+		--autotranslate icon for pretranslated messages in chat
+		--normal surface plane for area markers
+		--"acknowledged" prompt and icon popup
+			--think "read receipt" 
 	--BUGS
 		--QuickChat detects controller mode if a controller is plugged in, even if keyboard is the "main" input
 		--character unit waypoints are in an unexpected place; move above head instead
 			--probably involves differently sized waypoint panels
 		--SWAT turrets have their target unit body detected incorrectly; waypoint is visually offset from the perceived turret core as a result
+		--known issue: discrepancies in max waypoint count between players may cause unexpected behavior
+			--waypoint limits are only enforced locally, so a client with a higher count may see other players' waypoints linger
+			--upon further reflection, this value should probably not even be a setting
 		--known issue: users of "goonmod's custom waypoints" (by tdlq) will not receive waypoints from users of this mod,
 			--until the local player receives a waypoint message back from them first (to register them)
 		
 	--TESTS
 		--any: test placing/removing waypoints while dead
+		--mp: test gcw compatibility
 		--mp: test late-join syncing
 		--mp: test max waypoints host/client mismatch behavior
 		
