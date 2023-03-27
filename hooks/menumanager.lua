@@ -21,22 +21,19 @@
 		
 		--proximity priority for spherecast
 	--FEATURES
+		--button/keybind to remove all waypoints
+			--remove all waypoints data AND all panel children
+			
 		--autotranslate icon for pretranslated messages in chat
 		--normal surface plane for area markers
 		--"acknowledged" prompt and popup
 		--subtle light glow at waypoint area
 		--built-in cooldown on text chats (locally enforced only)
 		--feedback on waypoint placement fail
-		--do not send text on waypoint placement fail
 		--auto icon for units
 		
 		--inverse alpha attenuation
 		
-		
-		--sync removal
-			--requires id syncing, which introduces the potential of an 'overflow' type issue
-		--button/keybind to remove all waypoints
-			--remove all waypoints data AND all panel children
 		--compatibility with other waypoint mods
 			--goonmod's custom waypoints. that's it really
 			--does tdlq's version change compatibility with og gcw?
@@ -60,8 +57,9 @@
 		--QuickChat detects controller mode if a controller is plugged in, even if keyboard is the "main" input
 		--character unit waypoints are in an unexpected place; move above head instead
 			--probably involves differently sized waypoint panels
-		--squish squash, no bugs here, only crimson flowers
+		--SWAT turrets have their target unit body detected incorrectly; waypoint is visually offset from the perceived turret core as a result
 	--TESTS
+		--any: test placing/removing waypoints while dead
 		--mp: test late-join syncing
 		--mp: test max waypoints host/client mismatch behavior
 		
@@ -120,6 +118,7 @@ QuickChat.WAYPOINT_SECONDARY_CAST_RADIUS = 50 --50cm
 QuickChat.WAYPOINT_OBJECT_PRIORITY_LIST = {
 	"Head",
 	"Neck"
+--,	"a_body" --for turrets, eventually
 }
 --these are objects picked up by the raycast,
 --not necessarily objects selected as a waypoint's unit target
@@ -1710,12 +1709,14 @@ function QuickChat:_SendWaypoint(waypoint_data) --format data and send to peers
 	end
 	
 	if sync_string then
-		self:Log(sync_string) --!
+--		self:Log(sync_string) --!
 
 		local API_VERSION = self.API_VERSION
 		for _,peer in pairs(managers.network:session():peers()) do 
 			if peer._quickchat_version == API_VERSION then
 				LuaNetworking:SendToPeer(peer:id(),self.SYNC_MESSAGE_WAYPOINT_ADD,sync_string)
+			else
+				--different version
 			end
 		end
 	end
@@ -1967,7 +1968,14 @@ function QuickChat:RemoveWaypoint(peer_id,waypoint_index) --from local player
 		local z = to_int(pos.z)
 		local unit_id = to_int(waypoint_data.unit_id)
 		local sync_string = string.format("%i;%i;%i;%i;%i",waypoint_type,x,y,z,unit_id)
-		LuaNetworking:SendToPeers(self.SYNC_MESSAGE_WAYPOINT_REMOVE,sync_string)
+		
+		for _,peer in pairs(managers.network:session():peers()) do 
+			local peer_version = peer._quickchat_version
+			if peer_version == self.API_VERSION then
+				--v2
+				LuaNetworking:SendToPeer(peer:id(),self.SYNC_MESSAGE_WAYPOINT_REMOVE,sync_string)
+			end
+		end
 	end
 	self:_RemoveWaypoint(peer_id,waypoint_index)
 end
@@ -2197,11 +2205,11 @@ function QuickChat:SendPresetMessage(preset_text_index)
 					local username = network_mgr.account:username()
 					local text_localized = managers.localization:text(preset_text)
 					for _,peer in pairs(session:peers()) do 
-						local quickchat_version = peer._quickchat_version 
+						local peer_version = peer._quickchat_version 
 						
 						--if the QC API changes in the future, outbound messages will be reformatted here
-						if quickchat_version == self.API_VERSION then
-							--v2
+						if peer_version == "1" or peer_version == self.API_VERSION then
+							--v1-v2
 							LuaNetworking:SendToPeer(peer:id(),self.SYNC_MESSAGE_PRESET,preset_text_index)
 						else
 							if peer:ip_verified() then
