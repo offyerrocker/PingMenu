@@ -2,6 +2,7 @@
 
 --[[
 	TODO
+"neutral" ping with center option (0) separate from cancellation
 straighten highlight/selected/active item terminology
 streamline wrapper class
 
@@ -20,8 +21,6 @@ require("lib/managers/dialogs/Dialog")
 --also requires Hooks library from BLT
 
 local RadialMenuDialog = class(Dialog)
-
-
 
 local RadialMenuObject = class()
 

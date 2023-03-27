@@ -13,11 +13,16 @@
 			--arrow triangle is too even
 		
 		--waypoint distance from player instead of camera?
+		--upscale assets (48x?)
 	--FEATURES
+		--optional local notif when another player has quickchat
+		--autotranslate icon for pretranslated messages in chat
+		--normal surface plane for area markers
+		--"acknowledged" prompt and popup
+		--subtle glow at waypoint area
 		--built-in cooldown on text chats (locally enforced only)
 		--feedback on waypoint placement fail
 		--do not send text on waypoint placement fail
-		--timers
 		--auto icon for units
 		
 		--inverse alpha attenuation
@@ -53,7 +58,9 @@
 		--character unit waypoints are in an unexpected place; move above head instead
 			--probably involves differently sized waypoint panels
 		--squish squash, no bugs here, only crimson flowers
-
+	--TESTS
+		--mp: test late-join syncing
+		--mp: test max waypoints host/client mismatch behavior
 QuickChat = QuickChat or {
 	_radial_menu_manager = nil, --for reference
 	_lip = nil 					--for reference
@@ -869,9 +876,10 @@ QuickChat._icon_presets = {
 QuickChat._label_presets = {
 	"qc_wp_look",							--1
 	"qc_wp_go",								--2
-	"qc_wp_loot",							--3
+	"qc_wp_bag",							--3
 	"qc_wp_kill",							--4
-	"qc_wp_deploy"							--5
+	"qc_wp_deploy",							--5
+	"qc_wp_interact"						--6
 }
 
 QuickChat._message_presets = {
@@ -900,7 +908,7 @@ QuickChat._message_presets = {
 	"qc_ptm_comms_defend",					--23
 	"qc_ptm_comms_regroup",					--24
 	"qc_ptm_comms_reviving",				--25
-	"qc_ptm_comms_summon",					--26
+	"qc_ptm_comms_comehere",				--26
 	"qc_ptm_comms_caution",					--27
 	"qc_ptm_comms_opening_door",			--28
 	"qc_ptm_comms_jammed_drill",			--29
@@ -1060,6 +1068,14 @@ local mvec3_set = mvector3.set
 local mvec3_dot = mvector3.dot
 local mvec3_normalize = mvector3.normalize
 local mrot_y = mrotation.y
+
+function QuickChat.to_int (n)
+	local _n = n and tonumber(n)
+	if _n then 
+		return math.floor(_n)
+	end
+	return 0
+end
 
 function QuickChat.find_interactable(unit)
 	if unit.interaction then 
@@ -1557,11 +1573,11 @@ end
 
 function QuickChat:_SendWaypoint(waypoint_data)
 	local sync_string
-	local waypoint_type = waypoint_data.waypoint_type
+	local to_int = self.to_int
+	local waypoint_type = to_int(waypoint_data.waypoint_type)
+	local label_index = to_int(waypoint_data.label_index)
+	local icon_index = to_int(waypoint_data.icon_index)
 	local timer_string = waypoint_data.timer_string
-	local label_index = waypoint_data.label_index
-	local icon_index = waypoint_data.icon_index
-	local unit_id = waypoint_data.unit_id
 	local end_t = waypoint_data.end_t
 	if end_t and end_t ~= 0 then
 		local int = math.floor(end_t)
@@ -1570,16 +1586,20 @@ function QuickChat:_SendWaypoint(waypoint_data)
 	else
 		timer_string = "0"
 	end
-	local pos = waypoint_data.position
+	local pos = waypoint_data.position or {}
+	local x = to_int(pos.x)
+	local y = to_int(pos.y)
+	local z = to_int(pos.z)
+	local unit_id = to_int(waypoint_data.unit_id)
 	if waypoint_type == self.WAYPOINT_TYPES.POSITION then
 		sync_string = string.format("%i;%i;%i;%s;%i;%i;%i",
 			waypoint_type,
 			label_index,
 			icon_index,
 			timer_string,
-			pos.x,
-			pos.y,
-			pos.z
+			x,
+			y,
+			z
 		)
 	elseif waypoint_type == self.WAYPOINT_TYPES.UNIT then
 		sync_string = string.format("%i;%i;%i;%s;%i;%i;%i;%i",
@@ -1587,9 +1607,9 @@ function QuickChat:_SendWaypoint(waypoint_data)
 			label_index,
 			icon_index,
 			timer_string,
-			pos.x,
-			pos.y,
-			pos.z,
+			x,
+			y,
+			z,
 			unit_id
 		)
 	end
@@ -1609,13 +1629,7 @@ end
 function QuickChat:ReceiveWaypoint(peer_id,message_string)
 	local data = string.split(message_string,";")
 	if data then
-		local to_int = function(n)
-			local _n = n and tonumber(n)
-			if _n then 
-				return math.floor(_n)
-			end
-			return 0
-		end
+		local to_int = self.to_int
 		
 		local waypoint_type = to_int(data[1])
 		local waypoint_label = to_int(data[2])
@@ -1756,11 +1770,10 @@ function QuickChat:_AddWaypoint(peer_id,waypoint_data)
 		icon:set_bottom(arrow:y())
 		icon:set_center_x(c_x)
 		
-		local font = "fonts/font_medium_shadow_mf"
 		local label = waypoint_panel:text({
 			name = "label",
 			text = label_text or "",
-			font = font,
+			font = "fonts/font_medium_shadow_mf",
 			font_size = label_font_size,
 			align = "center",
 			vertical = "top",
@@ -1775,7 +1788,7 @@ function QuickChat:_AddWaypoint(peer_id,waypoint_data)
 		local desc = waypoint_panel:text({ 
 			name = "desc",
 			text = "",
-			font = font,
+			font = tweak_data.menu.pd2_medium_font, --timer icon character is not present in font_medium_shadow_mf
 			font_size = 16,
 			y = arrow:bottom() + 4,
 			align = "center",
@@ -2156,7 +2169,7 @@ function QuickChat:UpdateWaypoints(t,dt)
 	if not alive(parent_panel) then
 		return
 	end
-	
+	local timer_char = managers.localization:get_default_macro("BTN_SPREE_SHORT")
 	local pc_x,pc_y = parent_panel:center()
 	local pw,ph = parent_panel:size()
 	local waypoint_panel_size = self.WAYPOINT_PANEL_SIZE
@@ -2188,7 +2201,7 @@ function QuickChat:UpdateWaypoints(t,dt)
 					is_valid = false
 					self:_RemoveWaypoint(peer_id,waypoint_id)
 				else
-					waypoint_data.desc:set_text(string.format("%0.1fs",remaining_t))
+					waypoint_data.desc:set_text(string.format("%s%0.1fs",timer_char,remaining_t))
 				end
 			else
 				local waypoint_type = waypoint_data.waypoint_type
@@ -2637,8 +2650,6 @@ QuickChat._buttons_list = {
 			"move",
 			"look"
 		}
-	},
-	
-	
+	}
 }
 --]]

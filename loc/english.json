@@ -24,7 +24,7 @@
 	"qc_ptm_comms_defend" : "Defend the objective!",
 	"qc_ptm_comms_regroup" : "We need to regroup!",
 	"qc_ptm_comms_reviving" : "I'll revive them!",
-	"qc_ptm_comms_summon" : "Come over here!",
+	"qc_ptm_comms_comehere" : "Come over here!",
 	"qc_ptm_comms_caution" : "Look out!",
 	"qc_ptm_comms_opening_door" : "I'll open this door!",
 	"qc_ptm_comms_jammed_drill" : "The drill is jammed!",
@@ -62,9 +62,10 @@
 	
 	"qc_wp_look" : "Look",
 	"qc_wp_go" : "Go",
-	"qc_wp_loot" : "Loot",
+	"qc_wp_bag" : "Bag",
 	"qc_wp_kill" : "Kill",
 	"qc_wp_deploy" : "Deploy",
+	"qc_wp_interact" : "Interact"
 	
 	"qc_controller_pc" : "Mouse + Keyboard",
 	"qc_controller_xbox360" : "Xbox 360 Controller",
