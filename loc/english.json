@@ -76,7 +76,8 @@
 	"qc_controller_steam" : "Steam Controller",
 	"qc_controller_gamepad" : "Generic Controller",
 	
-	"qc_alert_player_registered" : "$USERNAME is using QuickChat.",
+	"qc_alert_player_registered_version_match" : "[$USERNAME] registered. (Version: $YOUR_VERSION)",
+	"qc_alert_player_registered_version_mismatch" : "[$USERNAME] version mismatch! (peer: [$PEER_VERSION] you: [$YOUR_VERSION]). Compatibility is not guaranteed.",
 	
 	"qc_menu_main_title" : "QuickChat",
 	"qc_menu_main_desc" : "Edit QuickChat Settings",

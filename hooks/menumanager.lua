@@ -84,6 +84,7 @@ QuickChat.default_settings = {
 	waypoints_attenuate_alpha_dot_threshold = 0.96,
 	waypoints_attenuate_alpha_min = 0.5
 }
+
 QuickChat.WAYPOINT_ICON_SIZE = 24
 QuickChat.WAYPOINT_ARROW_ICON_SIZE = 16
 QuickChat.WAYPOINT_LABEL_FONT_SIZE = 24
@@ -1138,6 +1139,11 @@ function QuickChat.get_unit_waypoint_position(unit,unit_object)
 	return unit:position()
 end
 
+function QuickChat.mvector3_equals(a,b)
+	--why yes i do hate myself why do you ask
+	return tostring(a) == tostring(b)
+end
+
 function QuickChat:Log(msg)
 	if Console then
 		Console:Log(msg)
@@ -1769,6 +1775,7 @@ function QuickChat:ReceiveWaypoint(peer_id,message_string) --sync create waypoin
 				start_t = start_t,
 				end_t = end_t,
 				position = position,
+				unit_id = unit_id,
 				unit = unit_result
 			})
 		end
@@ -1776,7 +1783,28 @@ function QuickChat:ReceiveWaypoint(peer_id,message_string) --sync create waypoin
 end
 
 function QuickChat:RemoveWaypointFromPeer(peer_id,message_string) --synced removal request from other players in the lobby
-	
+	local message_data = string.split(message_string,";")
+	if message_data then
+		local to_int = self.to_int
+		
+		local waypoint_type = to_int(message_data[1])
+		local x = to_int(message_data[2])
+		local y = to_int(message_data[3])
+		local z = to_int(message_data[4])
+		local unit_id = to_int(message_data[5])
+		local data = {
+			waypoint_type = waypoint_type,
+			unit_id = unit_id,
+			position = Vector3(x,y,z)
+		}
+		
+		local waypoint_index,_,_ = self:FindWaypoint(data,peer_id,nil)
+		if waypoint_index then
+			self:_RemoveWaypoint(peer_id,waypoint_index)
+		else
+			self:Log("Error: Failed to find and remove waypoint: " .. tostring(message_string))
+		end
+	end
 end
 
 function QuickChat:_AddWaypoint(peer_id,waypoint_data) --called for both local player and for peers
@@ -1921,6 +1949,7 @@ function QuickChat:_AddWaypoint(peer_id,waypoint_data) --called for both local p
 			waypoint_type = waypoint_data.waypoint_type,
 			unit = unit,
 			unit_object = object,
+			unit_id = waypoint_data.unit_id,
 			position = waypoint_data.position
 		}
 		table.insert(peer_waypoints,#peer_waypoints + 1,new_waypoint)
@@ -1928,8 +1957,19 @@ function QuickChat:_AddWaypoint(peer_id,waypoint_data) --called for both local p
 end
 
 function QuickChat:RemoveWaypoint(peer_id,waypoint_index) --from local player
+	local waypoint_data = self._synced_waypoints[peer_id][waypoint_index]
+	if waypoint_data then
+		local to_int = self.to_int
+		local waypoint_type = to_int(waypoint_data.waypoint_type)
+		local pos = waypoint_data.position or {}
+		local x = to_int(pos.x)
+		local y = to_int(pos.y)
+		local z = to_int(pos.z)
+		local unit_id = to_int(waypoint_data.unit_id)
+		local sync_string = string.format("%i;%i;%i;%i;%i",waypoint_type,x,y,z,unit_id)
+		LuaNetworking:SendToPeers(self.SYNC_MESSAGE_WAYPOINT_REMOVE,sync_string)
+	end
 	self:_RemoveWaypoint(peer_id,waypoint_index)
---	LuaNetworking:SendToPeers(self.SYNC_MESSAGE_WAYPOINT_REMOVE,"remove")
 end
 
 function QuickChat:_RemoveWaypoint(peer_id,waypoint_index)
@@ -2058,6 +2098,58 @@ function QuickChat:GetAimedWaypoint(force_recalculate,dot_threshold,filter_peeri
 	return best_wp_index,best_wp_peerid,best_wp_data
 end
 
+
+function QuickChat:FindWaypoint(data,filter_peerids,filter_wp_func)
+	local wp_index,wp_peer_id,wp_data
+	
+	local desired_type = data.waypoint_type
+	local desired_pos = data.position
+	local desired_unit_id = data.unit_id or alive(data.unit) and data.unit:id()
+	
+	local find_waypoints = function(waypoints)
+		for waypoint_index,waypoint_data in pairs(waypoints) do 
+			local allowed = true
+			if type(filter_wp_func) == "function" then
+				allowed = filter_wp_func(waypoint_data)
+			end
+			if allowed then
+				if desired_type == waypoint_data.waypoint_type then
+					if desired_type == self.WAYPOINT_TYPES.UNIT then
+						if waypoint_data.unit_id == desired_unit_id then
+							return waypoint_index,waypoint_data
+						end
+					elseif desired_type == self.WAYPOINT_TYPES.POSITION then
+						if self.mvector3_equals(desired_pos,waypoint_data.position) then
+							return waypoint_index,waypoint_data
+						end
+					end
+				end
+			end
+		end
+	end
+	
+	if type(filter_peerids) == "table" then
+		for _,peer_id in pairs(filter_peerids) do 
+			local waypoints = self._synced_waypoints[peer_id]
+			wp_index,wp_data = find_waypoints(waypoints)
+			if wp_index then
+				wp_peer_id = peer_id
+				break
+			end
+		 end
+	else
+		if type(filter_peerids) == "number" then
+			wp_peer_id = filter_peerids
+		else
+			wp_peer_id = managers.network:session():local_peer():id()
+		end
+		local waypoints = self._synced_waypoints[wp_peer_id]
+		
+		wp_index,wp_data = find_waypoints(waypoints)
+	end
+	return wp_index,wp_peer_id,wp_data
+end
+
 --Networking
 
 function QuickChat:RegisterPeerById(peer_id,version)
@@ -2069,7 +2161,13 @@ function QuickChat:RegisterPeerById(peer_id,version)
 				local peer_name = peer:name()
 				local sender_name = managers.localization:text("qc_menu_main_title")
 				local peer_color = tweak_data.chat_colors[peer_id]
-				managers.chat:_receive_message(ChatManager.GAME,sender_name,managers.localization:text("qc_alert_player_registered",{USERNAME=peer_name}),peer_color)
+				local alert_string_id
+				if version == self.API_VERSION then
+					alert_string_id = "qc_alert_player_registered_version_match"
+				else
+					alert_string_id = "qc_alert_player_registered_version_mismatch"
+				end
+				managers.chat:_receive_message(ChatManager.GAME,sender_name,managers.localization:text(alert_string_id,{USERNAME=peer_name,YOUR_VERSION=self.API_VERSION,PEER_VERSION=version}),peer_color)
 			end
 			peer._quickchat_version = version
 			self._synced_waypoints[peer_id] = self._synced_waypoints[peer_id] or {}
@@ -2730,16 +2828,22 @@ Hooks:Add("LocalizationManagerPostInit","QuickChat_LocalizationManagerPostInit",
 end)
 
 Hooks:Add("NetworkReceivedData","QuickChat_NetworkReceivedData",function(sender, message_id, message_body)
-	if message_id == QuickChat.SYNC_MESSAGE_PRESET then
-		QuickChat:ReceivePresetMessage(sender,message_body)
-	elseif message_id == QuickChat.SYNC_MESSAGE_WAYPOINT_ADD then
-		QuickChat:ReceiveWaypoint(sender,message_body)
-	elseif message_id == QuickChat.SYNC_MESSAGE_WAYPOINT_REMOVE then
-		QuickChat:RemoveWaypointFromPeer(sender,message_body)
-	elseif message_id == QuickChat.SYNC_MESSAGE_WAYPOINT_ACKNOWLEDGE then
-		QuickChat:AcknowledgeWaypointFromPeer(sender,message_body)
-	elseif message_id == QuickChat.SYNC_MESSAGE_REGISTER then
-		QuickChat:RegisterPeerById(sender,message_body)
+	local peer = managers.network:session():peer(sender)
+	if managers.chat and managers.chat:is_peer_muted(peer) then
+		return
+	end
+	if peer._quickchat_version == self.API_VERSION then
+		if message_id == QuickChat.SYNC_MESSAGE_PRESET then
+			QuickChat:ReceivePresetMessage(sender,message_body)
+		elseif message_id == QuickChat.SYNC_MESSAGE_WAYPOINT_ADD then
+			QuickChat:ReceiveWaypoint(sender,message_body)
+		elseif message_id == QuickChat.SYNC_MESSAGE_WAYPOINT_REMOVE then
+			QuickChat:RemoveWaypointFromPeer(sender,message_body)
+		elseif message_id == QuickChat.SYNC_MESSAGE_WAYPOINT_ACKNOWLEDGE then
+			QuickChat:AcknowledgeWaypointFromPeer(sender,message_body)
+		elseif message_id == QuickChat.SYNC_MESSAGE_REGISTER then
+			QuickChat:RegisterPeerById(sender,message_body)
+		end
 	end
 end)
 
