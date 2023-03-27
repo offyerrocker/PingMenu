@@ -1,6 +1,10 @@
 --TODO
 
 	--SCHEMA
+		--allow other movement actions during radial menu? (eg. steelsight)
+			--tactical leaning compat
+				--use head position instead of cam position?
+		
 		--todo use _supported_controller_type_map instead of manual mapping?
 			--may not be necessary if only the wrapper type is used
 		--needs VR support
@@ -14,6 +18,8 @@
 		--upscale assets (48x?)
 		--"fuzzy" cylinder raycasts?
 		--honey badger mode- barrel through and send that goddamned raycast no matter what
+		
+		--proximity priority for spherecast
 	--FEATURES
 		--autotranslate icon for pretranslated messages in chat
 		--normal surface plane for area markers
@@ -26,8 +32,6 @@
 		
 		--inverse alpha attenuation
 		
-		--debug mode to draw oobb boxes and casts
-		--proximity priority for spherecast
 		
 		--sync removal
 			--requires id syncing, which introduces the potential of an 'overflow' type issue
@@ -60,6 +64,7 @@
 	--TESTS
 		--mp: test late-join syncing
 		--mp: test max waypoints host/client mismatch behavior
+		
 QuickChat = QuickChat or {
 	_radial_menu_manager = nil, --for reference
 	_lip = nil 					--for reference
@@ -71,22 +76,24 @@ QuickChat._save_layouts_path = QuickChat._save_path .. "layouts/"
 QuickChat._bindings_name = "bindings_$WRAPPER.json"
 QuickChat._settings_name = "settings.json"
 QuickChat.default_settings = {
+	debug_draw = false,
 	waypoints_alert_on_registration = true,
 	waypoints_max_count = 1,
 	waypoints_aim_dot_threshold = 0.99,
 	waypoints_attenuate_alpha_enabled = true,
-	waypoints_attenuate_alpha_dot_threshold = 0.98,
-	waypoints_attenuate_alpha_min = 0.3
+	waypoints_attenuate_alpha_dot_threshold = 0.96,
+	waypoints_attenuate_alpha_min = 0.5
 }
 QuickChat.WAYPOINT_ICON_SIZE = 24
 QuickChat.WAYPOINT_ARROW_ICON_SIZE = 16
 QuickChat.WAYPOINT_LABEL_FONT_SIZE = 24
 QuickChat.WAYPOINT_PANEL_SIZE = 100
-QuickChat.WAYPOINT_ANIMATE_FADEIN_DURATION = 3 --pulse for 3 seconds total
+QuickChat.WAYPOINT_ANIMATE_FADEIN_DURATION = 5 --pulse for 3 seconds total
 QuickChat.WAYPOINT_ANIMATE_PULSE_INTERVAL = 1 --1 second per complete pulse anim
 
 QuickChat.settings = table.deep_map_copy(QuickChat.default_settings) --general user pref
 QuickChat.sort_settings = {
+	"debug_draw",
 	"waypoints_alert_on_registration",
 	"waypoints_max_count",
 	"waypoints_aim_dot_threshold",
@@ -1176,6 +1183,10 @@ function QuickChat:IsWaypointRegistrationAlertEnabled()
 	return self.settings.waypoints_alert_on_registration
 end
 
+function QuickChat:IsDebugDrawEnabled()
+	return self.settings.debug_draw
+end
+
 --Setup
 
 function QuickChat:Setup() --on game setup complete
@@ -1510,6 +1521,8 @@ function QuickChat:AddWaypoint(params)
 		--doesn't typically happen, usually for only a brief moment when all four players go into custody
 		return 
 	end
+	local debug_draw_enabled = self:IsDebugDrawEnabled()
+	local debug_draw_duration = 5
 	
 	local peer_id = managers.network:session():local_peer():id()
 	params = params or {}
@@ -1535,6 +1548,10 @@ function QuickChat:AddWaypoint(params)
 	local raycast = World:raycast("ray",cam_pos,to_pos,"slot_mask",self._waypoint_target_slotmask) or {}
 	
 	if raycast and raycast.position then
+		if debug_draw_enabled then
+			local brush = Draw:brush(Color.red:with_alpha(0.66),debug_draw_duration)
+			brush:line(cam_pos,raycast.position,10)
+		end
 		local position = raycast.position
 		local unit_result
 		local unit = raycast.unit
@@ -1552,6 +1569,36 @@ function QuickChat:AddWaypoint(params)
 		if unit then
 			if unit and alive(unit) then 
 				unit_result = find_character(unit) or find_interactable(unit)
+				
+				if debug_draw_enabled then
+					local oobb = unit:oobb()
+					if oobb then
+						BeardLib:AddUpdater("qc_debug_draw",function(t,dt)
+							Draw:brush(Color.red:with_alpha(0.66)):sphere(raycast.position,self.WAYPOINT_SECONDARY_CAST_RADIUS)
+							debug_draw_duration = debug_draw_duration - dt
+							if alive(unit) then
+								--todo draw head or other object here
+								if debug_draw_duration <= 0 then
+									BeardLib:RemoveUpdater("qc_debug_draw")
+								else
+									local _oobb = unit:oobb()
+									if _oobb then
+										_oobb:debug_draw(0,0,1)
+										Draw:brush(Color.blue:with_alpha(0.66)):sphere(_oobb:center(),10)
+									end
+									
+									local interaction_ext = unit:interaction()
+									if interaction_ext then
+										Draw:brush(Color.green:with_alpha(0.66)):sphere(interaction_ext:interact_position(),10)
+									end
+								end
+							else
+								BeardLib:RemoveUpdater("qc_debug_draw")
+							end
+						end)
+					end
+				end
+				
 			end
 		end
 		
@@ -1566,7 +1613,6 @@ function QuickChat:AddWaypoint(params)
 					break
 				end
 			end
-		
 		end
 		
 		local waypoint_type
