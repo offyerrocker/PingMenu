@@ -83,19 +83,11 @@ QuickChat.default_settings = {
 	compatibility_gcw_enabled = true,
 	waypoints_alert_on_registration = true,
 	waypoints_max_count = 1,
-	waypoints_aim_dot_threshold = 0.99,
+	waypoints_aim_dot_threshold = 0.995,
 	waypoints_attenuate_alpha_enabled = true,
 	waypoints_attenuate_alpha_dot_threshold = 0.96,
 	waypoints_attenuate_alpha_min = 0.5
 }
-
-QuickChat.WAYPOINT_ICON_SIZE = 24
-QuickChat.WAYPOINT_ARROW_ICON_SIZE = 16
-QuickChat.WAYPOINT_LABEL_FONT_SIZE = 24
-QuickChat.WAYPOINT_PANEL_SIZE = 100
-QuickChat.WAYPOINT_ANIMATE_FADEIN_DURATION = 5 --pulse for 3 seconds total
-QuickChat.WAYPOINT_ANIMATE_PULSE_INTERVAL = 1 --1 second per complete pulse anim
-
 QuickChat.settings = table.deep_map_copy(QuickChat.default_settings) --general user pref
 QuickChat.sort_settings = {
 	"debug_draw",
@@ -104,15 +96,18 @@ QuickChat.sort_settings = {
 	"waypoints_aim_dot_threshold",
 	"waypoints_attenuate_alpha_enabled",
 	"waypoints_attenuate_alpha_dot_threshold",
-	"waypoints_attenuate_alpha_min"
+	"waypoints_attenuate_alpha_min",
+	"compatibility_gcw_enabled"
 }
-QuickChat._bindings = {
---[[
-	callouts_1 = "j",
-	deployables_1 = "k",
-	custom_1 = "l"
---]]
-}
+QuickChat._bindings = {}
+
+QuickChat.WAYPOINT_ICON_SIZE = 24
+QuickChat.WAYPOINT_ARROW_ICON_SIZE = 16
+QuickChat.WAYPOINT_LABEL_FONT_SIZE = 24
+QuickChat.WAYPOINT_PANEL_SIZE = 100
+QuickChat.WAYPOINT_ANIMATE_FADEIN_DURATION = 5 --pulse for 3 seconds total
+QuickChat.WAYPOINT_ANIMATE_PULSE_INTERVAL = 1 --1 second per complete pulse anim
+
 QuickChat.SYNC_MESSAGE_PRESET = "QuickChat_message_preset"
 QuickChat.SYNC_MESSAGE_REGISTER = "QuickChat_Register"
 QuickChat.SYNC_MESSAGE_WAYPOINT_ADD = "QuickChat_SendWaypoint"
@@ -1089,7 +1084,7 @@ local mvec3_dot = mvector3.dot
 local mvec3_normalize = mvector3.normalize
 local mrot_y = mrotation.y
 
-function QuickChat.to_int (n)
+function QuickChat.to_int(n)
 	local _n = n and tonumber(n)
 	if _n then 
 		return math.floor(_n)
@@ -1156,7 +1151,7 @@ function QuickChat:Log(msg)
 	if Console then
 		Console:Log(msg)
 	else
-		log(msg)
+		log(tostring(msg))
 	end
 end
 
@@ -1200,7 +1195,6 @@ end
 function QuickChat:IsGCWCompatibilityEnabled()
 	return self.settings.compatibility_gcw_enabled
 end
-
 
 function QuickChat:IsDebugDrawEnabled()
 	return self.settings.debug_draw
@@ -1428,7 +1422,13 @@ function QuickChat:LoadMenuFromIni(ini_data) --converts and validates saved data
 			
 			if body.ping_as_default then 
 --				new_menu_params.callback_on_cancelled = callback(self,self,"AddWaypoint")
-				new_menu_params.callback_on_cancelled = function() local success,err = blt.pcall(callback(self,self,"AddWaypoint")) if err then self:Log(err) end end
+				new_menu_params.callback_on_cancelled = function()
+					local success,err = blt.pcall(callback(self,self,"AddWaypoint"))
+					if not success then
+						self:Log(err)
+					end
+				end
+				
 			end
 			
 			new_menu_params.texture_highlight = body.texture_highlight or default_menu_data.texture_highlight
@@ -1515,7 +1515,6 @@ end
 function QuickChat:CallbackRadialSelection(item_data) --callback for selecting a radial option
 	local preset_text_index = item_data.preset_text_index
 	local text = item_data.text
-	
 	if item_data.waypoint then
 		--do not perform other callback actions if waypoint placement fails
 		local success = self:AddWaypoint(item_data) 
@@ -1750,7 +1749,7 @@ function QuickChat:_SendWaypoint(waypoint_data) --format data and send to peers
 	end
 end
 
-function QuickChat:ReceiveWaypoint(peer_id,message_string) --sync create waypoint request from peers
+function QuickChat:ReceiveAddWaypoint(peer_id,message_string) --sync create waypoint request from peers
 	local data = string.split(message_string,";")
 	if data then
 		local to_int = self.to_int
@@ -1811,7 +1810,7 @@ function QuickChat:ReceiveWaypoint(peer_id,message_string) --sync create waypoin
 	end
 end
 
-function QuickChat:RemoveWaypointFromPeer(peer_id,message_string) --synced removal request from other players in the lobby
+function QuickChat:ReceiveRemoveWaypoint(peer_id,message_string) --synced removal request from other players in the lobby
 	local message_data = string.split(message_string,";")
 	if message_data then
 		local to_int = self.to_int
@@ -2036,12 +2035,73 @@ function QuickChat:DisposeWaypoints(peer_id)
 	end
 end
 
+function QuickChat:AcknowledgeWaypoint(peer_id,waypoint_id)
+	self:_AcknowledgeWaypoint(peer_id,waypoint_id)
+	self:SendAcknowledgeWaypoint(peer_id,waypoint_id)
+	--not yet implemented
+end
+
+function QuickChat:_AcknowledgeWaypoint(peer_id,waypoint_id)
+	--not yet implemented
+	local waypoint_data = self._synced_waypoints[peer_id][waypoint_id]
+	if waypoint_data then
+		
+	end
+end
+
 function QuickChat:SendAcknowledgeWaypoint(peer_id,waypoint_id)
 	--not yet implemented
 end
 
-function QuickChat:AcknowledgeWaypointFromPeer(sender,message_string)
+function QuickChat:ReceiveAcknowledgeWaypoint(sender,message_string)
 	--not yet implemented
+	self:_AcknowledgeWaypoint(peer_id,waypoint_id)
+end
+
+function QuickChat:ReceiveGCWAttach(peer_id,message_string)
+	self:RegisterPeer(sender,"tdlq_gcw")
+	local unit_id = self.to_int(message_body)
+	local unit
+	for _, _unit in ipairs(managers.interaction._interactive_units) do
+		if alive(_unit) and _unit:id() == unit_id then
+			unit = _unit
+			break
+		end
+	end
+	
+	if unit then
+		local position = Vector3() --shouldn't matter much for a unit waypoint
+		self:_AddWaypoint(sender,{
+			waypoint_type = self.WAYPOINT_TYPES.UNIT,
+			label_index = nil,
+			icon_index = nil,
+			end_t = nil,
+			position = position,
+			unit_id = unit_id,
+			unit = unit
+		})
+	end
+end
+
+function QuickChat:ReceiveGCWPlace(peer_id,message_string)
+	self:RegisterPeer(sender,"tdlq_gcw")
+	local position = string.ToVector3(message_string)
+	if position then
+		self:_AddWaypoint(sender,{
+			waypoint_type = self.WAYPOINT_TYPES.POSITION,
+			label_index = nil,
+			icon_index = nil,
+			end_t = nil,
+			position = position,
+			unit_id = unit_id,
+			unit = unit
+		})
+	end
+end
+
+function QuickChat:ReceiveGCWRemove(peer_id,message_string)
+	QuickChat:RegisterPeer(sender,"tdlq_gcw")
+	QuickChat:DisposeWaypoints(sender)
 end
 
 --gets the waypoint that the player is looking at, if any
@@ -2133,7 +2193,6 @@ function QuickChat:GetAimedWaypoint(force_recalculate,dot_threshold,filter_peeri
 	
 	return best_wp_index,best_wp_peerid,best_wp_data
 end
-
 
 function QuickChat:FindWaypoint(data,filter_peerids,filter_wp_func)
 	local wp_index,wp_peer_id,wp_data
@@ -2648,6 +2707,8 @@ function QuickChat:LoadBindings(filename)
 	end
 end
 
+--Menu Creation and other hooks
+
 Hooks:Add("MenuManagerSetupCustomMenus","QuickChat_MenuManagerSetupCustomMenus",function(menu_manager, nodes)
 	QuickChat:UnpackGamepadBindings()
 	QuickChat:LoadSettings()
@@ -2872,56 +2933,21 @@ Hooks:Add("NetworkReceivedData","QuickChat_NetworkReceivedData",function(sender,
 		if message_id == QuickChat.SYNC_MESSAGE_PRESET then
 			QuickChat:ReceivePresetMessage(sender,message_body)
 		elseif message_id == QuickChat.SYNC_MESSAGE_WAYPOINT_ADD then
-			QuickChat:ReceiveWaypoint(sender,message_body)
+			QuickChat:ReceiveAddWaypoint(sender,message_body)
 		elseif message_id == QuickChat.SYNC_MESSAGE_WAYPOINT_REMOVE then
-			QuickChat:RemoveWaypointFromPeer(sender,message_body)
+			QuickChat:ReceiveRemoveWaypoint(sender,message_body)
 		elseif message_id == QuickChat.SYNC_MESSAGE_WAYPOINT_ACKNOWLEDGE then
-			QuickChat:AcknowledgeWaypointFromPeer(sender,message_body)
+			QuickChat:ReceiveAcknowledgeWaypoint(sender,message_body)
 		elseif message_id == QuickChat.SYNC_MESSAGE_REGISTER then
 			QuickChat:RegisterPeerById(sender,message_body)
 		end
 	elseif QuickChat:IsGCWCompatibilityEnabled() then
 		if message_id == QuickChat.SYNC_TDLQGCW_WAYPOINT_PLACE then
-			QuickChat:RegisterPeer(sender,"tdlq_gcw")
-			local position = string.ToVector3(message_body)
-			if position then
-				QuickChat:_AddWaypoint(sender,{
-					waypoint_type = QuickChat.WAYPOINT_TYPES.POSITION,
-					label_index = nil,
-					icon_index = nil,
-					end_t = nil,
-					position = position,
-					unit_id = unit_id,
-					unit = unit
-				})
-			end
+			QuickChat:ReceiveGCWPlace(sender,message_body)
 		elseif message_id == QuickChat.SYNC_TDLQGCW_WAYPOINT_UNIT then
-			QuickChat:RegisterPeer(sender,"tdlq_gcw")
-			local unit_id = QuickChat.to_int(message_body)
-			local unit
-			for _, _unit in ipairs(managers.interaction._interactive_units) do
-				if alive(_unit) and _unit:id() == unit_id then
-					unit = _unit
-					break
-				end
-			end
-			
-			if unit then
-				local position = Vector3() --shouldn't matter much for a unit waypoint
-				QuickChat:_AddWaypoint(sender,{
-					waypoint_type = QuickChat.WAYPOINT_TYPES.UNIT,
-					label_index = nil,
-					icon_index = nil,
-					end_t = nil,
-					position = position,
-					unit_id = unit_id,
-					unit = unit
-				})
-			end
-			
+			QuickChat:ReceiveGCWPlace(sender,message_body)
 		elseif message_id == QuickChat.SYNC_TDLQGCW_WAYPOINT_REMOVE then
-			QuickChat:RegisterPeer(sender,"tdlq_gcw")
-			QuickChat:DisposeWaypoints(sender)
+			QuickChat:ReceiveGCWRemove(sender,message_body)
 		end
 	end
 end)
