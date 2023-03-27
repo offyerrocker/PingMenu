@@ -1,5 +1,9 @@
 --TODO
 
+	--TODO function to get current unit waypoint position
+	--so that this is consistent with display 
+	--ie in cases where unit oobb center, specific body, or interaction point is used as waypoint center
+	
 	--SCHEMA
 		--todo use _supported_controller_type_map instead of manual mapping?
 			--may not be necessary if only the wrapper type is used
@@ -101,6 +105,7 @@ QuickChat._bindings = {
 QuickChat.SYNC_MESSAGE_PRESET = "QuickChat_message_preset"
 QuickChat.SYNC_MESSAGE_REGISTER = "QuickChat_Register"
 QuickChat.SYNC_MESSAGE_WAYPOINT_ADD = "QuickChat_SendWaypoint"
+QuickChat.SYNC_MESSAGE_WAYPOINT_ACKNOWLEDGE = "QuickChat_AcknowledgeWaypoint"
 QuickChat.SYNC_MESSAGE_WAYPOINT_REMOVE = "QuickChat_RemoveWaypoint"
 QuickChat.API_VERSION = "2" -- string!
 QuickChat.WAYPOINT_RAYCAST_DISTANCE = 250000 --250m
@@ -1102,6 +1107,31 @@ function QuickChat.find_character(unit,no_recursion)
 	end
 end
 
+function QuickChat.get_unit_waypoint_position(unit,unit_object)
+	local interaction_ext = unit:interaction()
+	local is_interactable
+	if interaction_ext then
+		if interaction_ext:active() and not interaction_ext:disabled() then
+			return interaction_ext:interact_position()
+		end
+	end
+	
+	local oobb
+	if unit_object then
+		oobb = unit_object:oobb()
+	else
+		oobb = unit:oobb()
+	end
+	if oobb then
+		return oobb:center()
+	end
+	local movement_ext = unit:movement() 
+	if movement_ext and movement_ext.m_pos then
+		return movement_ext:m_pos()
+	end
+	return unit:position()
+end
+
 function QuickChat:Log(msg)
 	if Console then
 		Console:Log(msg)
@@ -1475,9 +1505,13 @@ function QuickChat:AddWaypoint(params)
 	params = params or {}
 	
 	local dot_aim_threshold = self:GetWaypointAimDotThreshold()
-	local aimed_index,aimed_wp_data = self:GetAimedWaypoint(true,dot_aim_threshold)
+	local aimed_index,aimed_peerid,aimed_wp_data = self:GetAimedWaypoint(true,dot_aim_threshold,peer_id,nil)
 	if aimed_index then
-		self:RemoveWaypoint(peer_id,aimed_index)
+		if aimed_peerid == peer_id then
+			self:RemoveWaypoint(peer_id,aimed_index)
+		else
+			self:SendAcknowledgeWaypoint(peer_id,aimed_index)
+		end
 		return
 	end
 	
@@ -1831,11 +1865,8 @@ function QuickChat:_AddWaypoint(peer_id,waypoint_data)
 			unit = unit,
 			unit_object = object,
 			position = waypoint_data.position
---			params = waypoint_data
 		}
---		waypoint_panel:set_size(1,1)
 		table.insert(peer_waypoints,#peer_waypoints + 1,new_waypoint)
---				local waypoint_index = 1 + ((current_num_waypoints + 1) % max_num_waypoints)
 	end
 end
 
@@ -1872,49 +1903,102 @@ function QuickChat:DisposeWaypoints(peer_id)
 	end
 end
 
+function QuickChat:SendAcknowledgeWaypoint(peer_id,waypoint_id)
+	--not yet implemented
+end
+
+function QuickChat:AcknowledgeWaypointFromPeer(sender,message_string)
+	--not yet implemented
+end
+
 --gets the waypoint that the player is looking at, if any
 --can only select waypoints placed by self
 local tmp_wp_dir = Vector3()
-function QuickChat:GetAimedWaypoint(force_recalculate,dot_threshold)
+function QuickChat:GetAimedWaypoint(force_recalculate,dot_threshold,filter_peerids,filter_wp_func)
 	local camera_position = managers.viewport:get_current_camera_position()
 	local camera_rotation = managers.viewport:get_current_camera_rotation()
+	local get_unit_waypoint_position = self.get_unit_waypoint_position
 	local cam_dir = camera_rotation:y()
-	local peer_id = managers.network:session():local_peer():id()
-	local best_dot = dot_threshold or -1
-	local best_index
-	local waypoints = self._synced_waypoints[peer_id]
-	for i,waypoint_data in ipairs(waypoints) do 
-		local dot = waypoint_data.last_dot
-		if force_recalculate or not dot then
-			if waypoint_data.waypoint_type == self.WAYPOINT_TYPES.UNIT then
-				local unit = waypoint_data.unit
-				if alive(unit) then
-					local unit_pos = unit:position()
-					mvec3_set(tmp_wp_dir,unit_pos)
-					mvec3_sub(tmp_wp_dir,camera_position)
-					mvec3_normalize(tmp_wp_dir)
---					local tmp_wp_dir = unit_pos - camera_position
-					dot = mvec3_dot(cam_dir,tmp_wp_dir)
+	
+	local best_wp_index = false
+	local best_wp_peerid,best_wp_data
+	
+	local function find_waypoint(data)
+		local best_dot = dot_threshold or -1
+		local best_index
+		for i,waypoint_data in ipairs(data) do 
+			local dot = waypoint_data.last_dot
+			local allowed = true
+			if type(filter_wp_func) == "function" then
+				allowed = filter_wp_func(waypoint_data)
+			end
+			if allowed then
+				if force_recalculate or not dot then
+					if waypoint_data.waypoint_type == self.WAYPOINT_TYPES.UNIT then
+						local unit = waypoint_data.unit
+						if alive(unit) then
+							local unit_pos = get_unit_waypoint_position(unit,waypoint_data.unit_object)
+							mvec3_set(tmp_wp_dir,unit_pos)
+							mvec3_sub(tmp_wp_dir,camera_position)
+							mvec3_normalize(tmp_wp_dir)
+							dot = mvec3_dot(cam_dir,tmp_wp_dir)
+						end
+					elseif waypoint_data.waypoint_type == self.WAYPOINT_TYPES.POSITION then
+						local position = waypoint_data.position
+						mvec3_set(tmp_wp_dir,position)
+						mvec3_sub(tmp_wp_dir,camera_position)
+						mvec3_normalize(tmp_wp_dir)
+						dot = mvec3_dot(cam_dir,tmp_wp_dir)
+					else
+						--invalid data/unknown waypoint type
+					end
 				end
-			elseif waypoint_data.waypoint_type == self.WAYPOINT_TYPES.POSITION then
-				local position = waypoint_data.position
-				mvec3_set(tmp_wp_dir,position)
-				mvec3_sub(tmp_wp_dir,camera_position)
-				mvec3_normalize(tmp_wp_dir)
---				local tmp_wp_dir = position - camera_position
-				dot = mvec3_dot(cam_dir,tmp_wp_dir)
-			else
-				--invalid data
+				if dot and dot > best_dot then
+					best_dot = dot
+					best_index = i
+				end
 			end
 		end
-		if dot and dot > best_dot then
-			best_dot = dot
-			best_index = i
+		if best_index then
+			return best_dot,best_index
 		end
 	end
-	if best_index then
-		return best_index,waypoints[best_index]
+	
+	if type(filter_peerids) == "table" then
+
+		--best dot of all peer waypoints
+		local best_dot = dot_threshold or -1
+
+		for _,peer_id in pairs(filter_peerids) do 
+			local waypoints = self._synced_waypoints[peer_id]
+			--best dot of this peer's waypoints
+			local tmp_best_dot,tmp_best_index = find_waypoint(waypoints)
+			
+			--compare against all best
+			if tmp_best_dot and tmp_best_dot > best_dot then
+				best_dot = tmp_best_dot
+				best_wp_index = tmp_best_index
+				best_wp_peerid = peer_id
+			end
+		end
+		best_wp_data = best_wp_index and self._synced_waypoints[best_wp_peerid][best_wp_index]
+	else
+		local peer_id
+		if type(filter_peerids) == "number" then
+			peer_id = filter_peerids
+		else
+			peer_id = managers.network:session():local_peer():id()
+		end
+		
+		local waypoints = self._synced_waypoints[peer_id]
+		local _,tmp_best_index = find_waypoint(waypoints)
+		
+		best_wp_index = tmp_best_index
+		best_wp_peerid = peer_id
+		best_wp_data = tmp_best_index and waypoints[tmp_best_index]
 	end
+	
+	return best_wp_index,best_wp_peerid,best_wp_data
 end
 
 --Networking
@@ -2182,6 +2266,7 @@ function QuickChat:UpdateWaypoints(t,dt)
 	
 	mrot_y(camera_rotation,tmp_cam_fwd)
 	
+	local get_unit_waypoint_position = self.get_unit_waypoint_position
 	local waypoint_attenuate_alpha_enabled = self:IsWaypointAttenuateAlphaEnabled()
 	local waypoint_attenuate_alpha_min = self:GetWaypointAttenuateAlphaMin()
 	local waypoint_attenuate_dot_threshold = self:GetWaypointAttenuateDotThreshold()
@@ -2208,24 +2293,7 @@ function QuickChat:UpdateWaypoints(t,dt)
 				if waypoint_type == self.WAYPOINT_TYPES.UNIT then
 					local unit = waypoint_data.unit
 					if alive(unit) then
-						local interaction_ext = unit:interaction()
-						local is_interactable
-						if interaction_ext then
-							if interaction_ext:active() and not interaction_ext:disabled() then
-								is_interactable = true
-								wp_position = interaction_ext:interact_position() or wp_position
-							end
-						end
-						
-						if not is_interactable then
-							local oobb
-							if waypoint_data.unit_object then
-								oobb = waypoint_data.unit_object:oobb()
-							else
-								oobb = unit:oobb()
-							end
-							wp_position = oobb and oobb:center() or unit:position() or wp_position
-						end
+						wp_position = get_unit_waypoint_position(unit,waypoint_data.unit_object) or wp_position
 					else
 						--expire (unit dead/despawned or otherwise invalid)
 						self:_RemoveWaypoint(peer_id,waypoint_id)
@@ -2599,6 +2667,8 @@ Hooks:Add("NetworkReceivedData","QuickChat_NetworkReceivedData",function(sender,
 		QuickChat:ReceiveWaypoint(sender,message_body)
 	elseif message_id == QuickChat.SYNC_MESSAGE_WAYPOINT_REMOVE then
 		QuickChat:RemoveWaypointFromPeer(sender,message_body)
+	elseif message_id == QuickChat.SYNC_MESSAGE_WAYPOINT_ACKNOWLEDGE then
+		QuickChat:AcknowledgeWaypointFromPeer(sender,message_body)
 	elseif message_id == QuickChat.SYNC_MESSAGE_REGISTER then
 		QuickChat:RegisterPeerById(sender,message_body)
 	end
