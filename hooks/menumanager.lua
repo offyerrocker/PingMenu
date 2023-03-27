@@ -1,9 +1,5 @@
 --TODO
 
-	--TODO function to get current unit waypoint position
-	--so that this is consistent with display 
-	--ie in cases where unit oobb center, specific body, or interaction point is used as waypoint center
-	
 	--SCHEMA
 		--todo use _supported_controller_type_map instead of manual mapping?
 			--may not be necessary if only the wrapper type is used
@@ -11,19 +7,18 @@
 		--generalize keybinds so that they can serve general callbacks instead of just radial menus
 			--this will also make mouse button support easier
 		--split paused/nonpaused updaters into separate tables for efficiency
-		--store hud/internal values to organize better, eg. animate_in_duration, icon_size, etc
-			--number of pulses should be saved in settings
 		--offscreen waypoint arrow needs visual adjustment
 			--arrow triangle is too even
 		
 		--waypoint distance from player instead of camera?
 		--upscale assets (48x?)
+		--"fuzzy" cylinder raycasts?
+		--honey badger mode- barrel through and send that goddamned raycast no matter what
 	--FEATURES
-		--optional local notif when another player has quickchat
 		--autotranslate icon for pretranslated messages in chat
 		--normal surface plane for area markers
 		--"acknowledged" prompt and popup
-		--subtle glow at waypoint area
+		--subtle light glow at waypoint area
 		--built-in cooldown on text chats (locally enforced only)
 		--feedback on waypoint placement fail
 		--do not send text on waypoint placement fail
@@ -76,6 +71,7 @@ QuickChat._save_layouts_path = QuickChat._save_path .. "layouts/"
 QuickChat._bindings_name = "bindings_$WRAPPER.json"
 QuickChat._settings_name = "settings.json"
 QuickChat.default_settings = {
+	waypoints_alert_on_registration = true,
 	waypoints_max_count = 1,
 	waypoints_aim_dot_threshold = 0.99,
 	waypoints_attenuate_alpha_enabled = true,
@@ -86,12 +82,15 @@ QuickChat.WAYPOINT_ICON_SIZE = 24
 QuickChat.WAYPOINT_ARROW_ICON_SIZE = 16
 QuickChat.WAYPOINT_LABEL_FONT_SIZE = 24
 QuickChat.WAYPOINT_PANEL_SIZE = 100
-QuickChat.WAYPOINT_ANIMATE_FADEIN_DURATION = 3 --pulse for 3 seconds
+QuickChat.WAYPOINT_ANIMATE_FADEIN_DURATION = 3 --pulse for 3 seconds total
+QuickChat.WAYPOINT_ANIMATE_PULSE_INTERVAL = 1 --1 second per complete pulse anim
 
 QuickChat.settings = table.deep_map_copy(QuickChat.default_settings) --general user pref
 QuickChat.sort_settings = {
-	"waypoint_aim_dot_threshold",
+	"waypoints_alert_on_registration",
 	"waypoints_max_count",
+	"waypoints_aim_dot_threshold",
+	"waypoints_attenuate_alpha_enabled",
 	"waypoints_attenuate_alpha_dot_threshold",
 	"waypoints_attenuate_alpha_min"
 }
@@ -1173,6 +1172,10 @@ function QuickChat:IsWaypointAttenuateAlphaEnabled()
 	return self.settings.waypoints_attenuate_alpha_enabled
 end
 
+function QuickChat:IsWaypointRegistrationAlertEnabled() 
+	return self.settings.waypoints_alert_on_registration
+end
+
 --Setup
 
 function QuickChat:Setup() --on game setup complete
@@ -1482,13 +1485,20 @@ end
 function QuickChat:CallbackRadialSelection(item_data)
 	local preset_text_index = item_data.preset_text_index
 	local text = item_data.text
+	
+	if item_data.waypoint then
+		--do not perform other callback actions if waypoint placement fails
+		local success = self:AddWaypoint(item_data) 
+		if not success then
+			--todo feedback here
+			return
+		end
+	end
+	
 	if preset_text_index then 
 		self:SendPresetMessage(preset_text_index)
 	elseif text then
 		self:SendChatToAll(text)
-	end
-	if item_data.waypoint then
-		self:AddWaypoint(item_data)
 	end
 end
 
@@ -1522,14 +1532,8 @@ function QuickChat:AddWaypoint(params)
 	
 	local mode = 1
 	
-	local raycast
-	if mode == 1 then --precise raycast
-		raycast = World:raycast("ray",cam_pos,to_pos,"slot_mask",self._waypoint_target_slotmask) or {}
-	else
-		--cylinder cast
-		--not implemented
-		raycast = nil
-	end
+	local raycast = World:raycast("ray",cam_pos,to_pos,"slot_mask",self._waypoint_target_slotmask) or {}
+	
 	if raycast and raycast.position then
 		local position = raycast.position
 		local unit_result
@@ -1601,8 +1605,10 @@ function QuickChat:AddWaypoint(params)
 		
 		self:_SendWaypoint(waypoint_data)
 		self:_AddWaypoint(peer_id,waypoint_data)
+		return true
 	end
 	
+	return false
 end
 
 function QuickChat:_SendWaypoint(waypoint_data)
@@ -2008,6 +2014,12 @@ function QuickChat:RegisterPeerById(peer_id,version)
 		local session = managers.network:session()
 		local peer = session and session:peer(peer_id)
 		if peer then 
+			if version and not peer._quickchat_version and self:IsWaypointRegistrationAlertEnabled() then
+				local peer_name = peer:name()
+				local sender_name = managers.localization:text("qc_menu_main_title")
+				local peer_color = tweak_data.chat_colors[peer_id]
+				managers.chat:_receive_message(ChatManager.GAME,sender_name,managers.localization:text("qc_alert_player_registered",{USERNAME=peer_name}),peer_color)
+			end
 			peer._quickchat_version = version
 			self._synced_waypoints[peer_id] = self._synced_waypoints[peer_id] or {}
 		end
@@ -2256,7 +2268,10 @@ function QuickChat:UpdateWaypoints(t,dt)
 	local timer_char = managers.localization:get_default_macro("BTN_SPREE_SHORT")
 	local pc_x,pc_y = parent_panel:center()
 	local pw,ph = parent_panel:size()
+	
+	local arrow_ghost_size = self.WAYPOINT_ARROW_ICON_SIZE
 	local waypoint_panel_size = self.WAYPOINT_PANEL_SIZE
+	local waypoint_animate_pulse_interval = self.WAYPOINT_ANIMATE_PULSE_INTERVAL
 	local outer_clamp_x_min = 0 + waypoint_panel_size/2
 	local outer_clamp_x_max = pw - (waypoint_panel_size/2)
 	local outer_clamp_y_min = 0 + waypoint_panel_size/2
@@ -2380,9 +2395,7 @@ function QuickChat:UpdateWaypoints(t,dt)
 					local arrow_ghost = waypoint_data.arrow_ghost
 					if waypoint_data.animate_in_duration > 0 then
 						local start_t = waypoint_data.start_t
-						local arrow_ghost_size = 16
-						local duration = 1
-						local pulse_t = 1 - (math.cos(((game_t - start_t) * 180/duration) % 180)+1) / 2
+						local pulse_t = 1 - (math.cos(((game_t - start_t) * 180/waypoint_animate_pulse_interval) % 180)+1) / 2
 						local size_scaled = arrow_ghost_size * (1 + pulse_t)
 						arrow_ghost:set_size(size_scaled,size_scaled)
 						arrow_ghost:set_alpha(1 - pulse_t)

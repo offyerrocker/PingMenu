@@ -76,6 +76,8 @@
 	"qc_controller_steam" : "Steam Controller",
 	"qc_controller_gamepad" : "Generic Controller",
 	
+	"qc_alert_player_registered" : "$USERNAME is using QuickChat.",
+	
 	"qc_menu_main_title" : "QuickChat",
 	"qc_menu_main_desc" : "Edit QuickChat Settings",
 	
