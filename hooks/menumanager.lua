@@ -17,12 +17,14 @@
 		--waypoint distance from player instead of camera?
 		--upscale assets (48x?)
 		--"fuzzy" cylinder raycasts?
-		--honey badger mode- barrel through and send that goddamned raycast no matter what
 		
 		--proximity priority for spherecast
 	--FEATURES
 		--button/keybind to remove all waypoints
 			--remove all waypoints data AND all panel children
+		
+		--honey badger mode- barrel through and send that goddamned waypoint no matter what
+			--especially useful for gcw compatibility
 			
 		--autotranslate icon for pretranslated messages in chat
 		--normal surface plane for area markers
@@ -58,6 +60,9 @@
 		--character unit waypoints are in an unexpected place; move above head instead
 			--probably involves differently sized waypoint panels
 		--SWAT turrets have their target unit body detected incorrectly; waypoint is visually offset from the perceived turret core as a result
+		--known issue: users of "goonmod's custom waypoints" (by tdlq) will not receive waypoints from users of this mod,
+			--until the local player receives a waypoint message back from them first (to register them)
+		
 	--TESTS
 		--any: test placing/removing waypoints while dead
 		--mp: test late-join syncing
@@ -75,6 +80,7 @@ QuickChat._bindings_name = "bindings_$WRAPPER.json"
 QuickChat._settings_name = "settings.json"
 QuickChat.default_settings = {
 	debug_draw = false,
+	compatibility_gcw_enabled = true,
 	waypoints_alert_on_registration = true,
 	waypoints_max_count = 1,
 	waypoints_aim_dot_threshold = 0.99,
@@ -112,6 +118,9 @@ QuickChat.SYNC_MESSAGE_REGISTER = "QuickChat_Register"
 QuickChat.SYNC_MESSAGE_WAYPOINT_ADD = "QuickChat_SendWaypoint"
 QuickChat.SYNC_MESSAGE_WAYPOINT_ACKNOWLEDGE = "QuickChat_AcknowledgeWaypoint"
 QuickChat.SYNC_MESSAGE_WAYPOINT_REMOVE = "QuickChat_RemoveWaypoint"
+QuickChat.SYNC_TDLQGCW_WAYPOINT_UNIT = "CustomWaypointAttach"
+QuickChat.SYNC_TDLQGCW_WAYPOINT_PLACE = "CustomWaypointPlace"
+QuickChat.SYNC_TDLQGCW_WAYPOINT_REMOVE = "CustomWaypointRemove"
 QuickChat.API_VERSION = "2" -- string!
 QuickChat.WAYPOINT_RAYCAST_DISTANCE = 250000 --250m
 QuickChat.WAYPOINT_SECONDARY_CAST_RADIUS = 50 --50cm
@@ -1184,9 +1193,14 @@ function QuickChat:IsWaypointAttenuateAlphaEnabled()
 	return self.settings.waypoints_attenuate_alpha_enabled
 end
 
-function QuickChat:IsWaypointRegistrationAlertEnabled() 
+function QuickChat:IsWaypointRegistrationAlertEnabled()
 	return self.settings.waypoints_alert_on_registration
 end
+
+function QuickChat:IsGCWCompatibilityEnabled()
+	return self.settings.compatibility_gcw_enabled
+end
+
 
 function QuickChat:IsDebugDrawEnabled()
 	return self.settings.debug_draw
@@ -1708,6 +1722,7 @@ function QuickChat:_SendWaypoint(waypoint_data) --format data and send to peers
 		)
 	end
 	
+	local tdlq_gcw_msg_id,tdlq_gcw_msg_body
 	if sync_string then
 --		self:Log(sync_string) --!
 
@@ -1715,6 +1730,19 @@ function QuickChat:_SendWaypoint(waypoint_data) --format data and send to peers
 		for _,peer in pairs(managers.network:session():peers()) do 
 			if peer._quickchat_version == API_VERSION then
 				LuaNetworking:SendToPeer(peer:id(),self.SYNC_MESSAGE_WAYPOINT_ADD,sync_string)
+			elseif peer._quickchat_version == "tdlq_gcw" then
+				if not tdlq_gcw_msg_id then
+					if waypoint_type == self.WAYPOINT_TYPES.UNIT then
+						tdlq_gcw_msg_id = self.SYNC_TDLQGCW_WAYPOINT_UNIT
+						tdlq_gcw_msg_body = unit_id
+					elseif waypoint_type == self.WAYPOINT_TYPES.POSITION then
+						tdlq_gcw_msg_id = self.SYNC_TDLQGCW_WAYPOINT_PLACE
+						tdlq_gcw_msg_body = string.format("%.1f,%.1f,%.1f",x,y,z)
+					end
+					if tdlq_gcw_msg_id and tdlq_gcw_msg_body then
+						LuaNetworking:SendToPeer(peer:id(),tdlq_gcw_msg_id,tdlq_gcw_msg_body)
+					end
+				end
 			else
 				--different version
 			end
@@ -2852,6 +2880,49 @@ Hooks:Add("NetworkReceivedData","QuickChat_NetworkReceivedData",function(sender,
 		elseif message_id == QuickChat.SYNC_MESSAGE_REGISTER then
 			QuickChat:RegisterPeerById(sender,message_body)
 		end
+	elseif QuickChat:IsGCWCompatibilityEnabled() then
+		if message_id == QuickChat.SYNC_TDLQGCW_WAYPOINT_PLACE then
+			QuickChat:RegisterPeer(sender,"tdlq_gcw")
+			local position = string.ToVector3(message_body)
+			if position then
+				QuickChat:_AddWaypoint(sender,{
+					waypoint_type = QuickChat.WAYPOINT_TYPES.POSITION,
+					label_index = nil,
+					icon_index = nil,
+					end_t = nil,
+					position = position,
+					unit_id = unit_id,
+					unit = unit
+				})
+			end
+		elseif message_id == QuickChat.SYNC_TDLQGCW_WAYPOINT_UNIT then
+			QuickChat:RegisterPeer(sender,"tdlq_gcw")
+			local unit_id = QuickChat.to_int(message_body)
+			local unit
+			for _, _unit in ipairs(managers.interaction._interactive_units) do
+				if alive(_unit) and _unit:id() == unit_id then
+					unit = _unit
+					break
+				end
+			end
+			
+			if unit then
+				local position = Vector3() --shouldn't matter much for a unit waypoint
+				QuickChat:_AddWaypoint(sender,{
+					waypoint_type = QuickChat.WAYPOINT_TYPES.UNIT,
+					label_index = nil,
+					icon_index = nil,
+					end_t = nil,
+					position = position,
+					unit_id = unit_id,
+					unit = unit
+				})
+			end
+			
+		elseif message_id == QuickChat.SYNC_TDLQGCW_WAYPOINT_REMOVE then
+			QuickChat:RegisterPeer(sender,"tdlq_gcw")
+			QuickChat:DisposeWaypoints(sender)
+		end
 	end
 end)
 
@@ -2860,47 +2931,3 @@ Hooks:Add("BaseNetworkSessionOnLoadComplete","QuickChat_OnLoaded",callback(Quick
 Hooks:Add("GameSetupUpdate","QuickChat_GameUpdate",callback(QuickChat,QuickChat,"Update","GameSetupUpdate"))
 Hooks:Add("GameSetupPausedUpdate","QuickChat_GamePausedUpdate",callback(QuickChat,QuickChat,"Update","GameSetupPausedUpdate"))
 Hooks:Add("MenuUpdate","QuickChat_MenuUpdate",callback(QuickChat,QuickChat,"Update","MenuUpdate"))
-
---[[
---input button name reference
---sorted by US standard keyboard layout
-QuickChat._buttons_list = {
-	--inputs from any given input device (keyboard, xbox360/xb1/ps3/ps4/steam controller) are translated into a VirtualController,
-	--which uses generic input names instead of device-specific input names
-	keyboard = {
-		"1",
-		"2",
-		"3",
-		"4",
-		"5",
-		"6",
-	},
-	virtualcontroller = {
-		--below are the generic input names
-		buttons = {
-			"confirm", -- a
-			"cancel", -- b
-			"reload", -- x
-			"switch_weapon", -- y
-			"start", -- start
-			"back", -- back
-			"weapon_gadget", -- d-pad up
-			"push_to_talk", -- d-pad down
-			"left", -- d-pad left
-			"right", -- d-pad right
-			"use_item", -- left bumper
-			"interact", -- right bumper
-			"trigger_right", -- right trigger
-			"trigger_left", -- left trigger
-			"run", -- left thumbstick down
-			"melee" -- right thumbstick down
-		},
-		axis = {
-			--these are for analog inputs, which provide a table containing inputs for the x and y axis
-			--d-pad is also provided as an analog axis input as well as digital button input but i don't feel like looking it up rn
-			"move",
-			"look"
-		}
-	}
-}
---]]
