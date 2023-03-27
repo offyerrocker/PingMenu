@@ -1493,7 +1493,7 @@ function QuickChat:ToggleMenu(id)
 	end
 end
 
-function QuickChat:CallbackRadialSelection(item_data)
+function QuickChat:CallbackRadialSelection(item_data) --callback for selecting a radial option
 	local preset_text_index = item_data.preset_text_index
 	local text = item_data.text
 	
@@ -1514,7 +1514,8 @@ function QuickChat:CallbackRadialSelection(item_data)
 end
 
 --Waypoints
-function QuickChat:AddWaypoint(params)
+
+function QuickChat:AddWaypoint(params) --called whenever local player attempts to create a new waypoint
 	
 	local viewport_cam = managers.viewport:get_current_camera()
 	if not viewport_cam then 
@@ -1621,6 +1622,8 @@ function QuickChat:AddWaypoint(params)
 			
 			for i,waypoint_data in ipairs(self._synced_waypoints[peer_id]) do 
 				if waypoint_data.unit == unit_result then
+					--if the local player tags the same unit, 
+					--just remove the waypoint instead
 					self:RemoveWaypoint(peer_id,i)
 					return
 				end
@@ -1657,7 +1660,7 @@ function QuickChat:AddWaypoint(params)
 	return false
 end
 
-function QuickChat:_SendWaypoint(waypoint_data)
+function QuickChat:_SendWaypoint(waypoint_data) --format data and send to peers
 	local sync_string
 	local to_int = self.to_int
 	local waypoint_type = to_int(waypoint_data.waypoint_type)
@@ -1712,7 +1715,7 @@ function QuickChat:_SendWaypoint(waypoint_data)
 	end
 end
 
-function QuickChat:ReceiveWaypoint(peer_id,message_string)
+function QuickChat:ReceiveWaypoint(peer_id,message_string) --sync create waypoint request from peers
 	local data = string.split(message_string,";")
 	if data then
 		local to_int = self.to_int
@@ -1772,11 +1775,11 @@ function QuickChat:ReceiveWaypoint(peer_id,message_string)
 	end
 end
 
-function QuickChat:RemoveWaypointFromPeer(peer_id,message_string)
+function QuickChat:RemoveWaypointFromPeer(peer_id,message_string) --synced removal request from other players in the lobby
 	
 end
 
-function QuickChat:_AddWaypoint(peer_id,waypoint_data)
+function QuickChat:_AddWaypoint(peer_id,waypoint_data) --called for both local player and for peers
 	local label_index = waypoint_data.label_index
 	local icon_index = waypoint_data.icon_index
 	local end_t = waypoint_data.end_t
@@ -1886,6 +1889,8 @@ function QuickChat:_AddWaypoint(peer_id,waypoint_data)
 		local current_num_waypoints = #peer_waypoints
 		local max_num_waypoints = self:GetMaxNumWaypoints()
 		if current_num_waypoints >= max_num_waypoints then
+			--locally enforce waypoint count limit;
+			--remove oldest waypoint if over the limit
 			self:_RemoveWaypoint(peer_id,1)
 		end
 		local unit = waypoint_data.unit
@@ -2343,7 +2348,7 @@ function QuickChat:UpdateWaypoints(t,dt)
 			if end_t then
 				local remaining_t = end_t - game_t
 				if remaining_t <= 0 then
-					--expire
+					--timer expired
 					is_valid = false
 					self:_RemoveWaypoint(peer_id,waypoint_id)
 				else
@@ -2356,7 +2361,7 @@ function QuickChat:UpdateWaypoints(t,dt)
 					if alive(unit) then
 						wp_position = get_unit_waypoint_position(unit,waypoint_data.unit_object) or wp_position
 					else
-						--expire (unit dead/despawned or otherwise invalid)
+						--unit despawned or otherwise invalid
 						self:_RemoveWaypoint(peer_id,waypoint_id)
 						is_valid = false
 					end
@@ -2387,6 +2392,8 @@ function QuickChat:UpdateWaypoints(t,dt)
 				--]]
 				
 				local hud_direction
+				--angle from screen center to the waypoint
+				
 				local c_x = panel_x - pc_x
 				local c_y = panel_y - pc_y
 				local new_waypoint_state
@@ -2403,10 +2410,8 @@ function QuickChat:UpdateWaypoints(t,dt)
 						if c_x < 0 then
 							hud_direction = hud_direction + 180
 						end
---						Console:SetTracker(hud_direction,2)
 					else
 						hud_direction = 0
---						Console:SetTracker("blergh!",2)
 					end
 					
 					panel_x = pc_x + (outer_clamp_x_max * math.cos(hud_direction) / 2)
@@ -2420,8 +2425,9 @@ function QuickChat:UpdateWaypoints(t,dt)
 						end
 					end
 					
---					Console:SetTracker(hud_direction,2)
 				end
+--				Console:SetTracker(hud_direction,2)
+
 				if new_waypoint_state == "offscreen" then
 					arrow:set_rotation(hud_direction)
 				elseif new_waypoint_state == "onscreen" then
@@ -2437,7 +2443,9 @@ function QuickChat:UpdateWaypoints(t,dt)
 						waypoint_data.panel:set_alpha(dot_alpha)
 					end
 				end
+				
 				if waypoint_data.animate_in_duration then
+					--do pulse for new waypoints
 					local arrow_ghost = waypoint_data.arrow_ghost
 					if waypoint_data.animate_in_duration > 0 then
 						local start_t = waypoint_data.start_t
@@ -2453,6 +2461,8 @@ function QuickChat:UpdateWaypoints(t,dt)
 						waypoint_data.animate_in_duration = nil
 					end
 				end
+				
+				--update icon angle/alpha for offscreen waypoints
 				if new_waypoint_state ~= waypoint_data.state then
 					local arrow_texture,arrow_texture_rect
 					if new_waypoint_state == "offscreen" then
