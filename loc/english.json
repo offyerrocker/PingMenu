@@ -16,7 +16,7 @@
 	"qc_ptm_general_leaving_now" : "I'm leaving now.",
 	"qc_ptm_general_leaving_soon" : "I need to go soon.",
 	"qc_ptm_general_leaving_last_game" : "I'm leaving after this heist.",
-	"qc_ptm_general_healembargo" : "Please don't heal me, because I'm using the Berserker skill.",
+	"qc_ptm_general_healembargo" : "Please don't heal me- I'm using a low health build.",
 	"qc_ptm_general_achievementhunting" : "I'm hunting for achievements.",
 	"qc_ptm_comms_help" : "Help me!",
 	"qc_ptm_comms_follow" : "Follow me!",
@@ -76,8 +76,8 @@
 	"qc_controller_steam" : "Steam Controller",
 	"qc_controller_gamepad" : "Generic Controller",
 	
-	"qc_alert_player_registered_version_match" : "[$USERNAME] registered. (Version: $YOUR_VERSION)",
-	"qc_alert_player_registered_version_mismatch" : "[$USERNAME] version mismatch! (peer: [$PEER_VERSION] you: [$YOUR_VERSION]). Compatibility is not guaranteed.",
+	"qc_alert_player_registered_version_match" : "[$USERNAME] version match.",
+	"qc_alert_player_registered_version_mismatch" : "[$USERNAME] version difference: (peer: [$PEER_VERSION] you: [$YOUR_VERSION])",
 	
 	"qc_menu_main_title" : "QuickChat",
 	"qc_menu_main_desc" : "Edit QuickChat Settings",

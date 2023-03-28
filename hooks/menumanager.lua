@@ -23,6 +23,10 @@
 		--voicelines
 		--fp redirect anims
 		
+		--modifier key to force placement
+		--modifier key to uh... something
+		--modifier key for timers
+		
 		--linger time for timer waypoints
 		--button/keybind to remove all waypoints
 			--remove all waypoints data AND all panel children
@@ -69,11 +73,13 @@
 			--upon further reflection, this value should probably not even be a setting
 		--known issue: users of "goonmod's custom waypoints" (by tdlq) will not receive waypoints from users of this mod,
 			--until the local player receives a waypoint message back from them first (to register them)
+		--gcw waypoints are set to "place" instead of "unit"
+			--on quickchat's end, the marker attaches to the unit, but on gcw's end, the waypoint is a static positional waypoint
+			--when the bag is picked up, the marker is removed on quickchat's end
+			--but lingers for gcw
 		
 	--TESTS
 		--any: test placing/removing waypoints while dead
-		--mp: test gcw compatibility
-		--mp: test late-join syncing
 		--mp: test max waypoints host/client mismatch behavior
 		
 QuickChat = QuickChat or {
@@ -88,7 +94,8 @@ QuickChat._bindings_name = "bindings_$WRAPPER.json"
 QuickChat._settings_name = "settings.json"
 QuickChat.default_settings = {
 	debug_draw = false,
-	compatibility_gcw_enabled = true,
+	compatibility_gcw_send_enabled = true,
+	compatibility_gcw_receive_enabled = true,
 	waypoints_alert_on_registration = true,
 	waypoints_max_count = 1,
 	waypoints_aim_dot_threshold = 0.995,
@@ -125,6 +132,7 @@ QuickChat.SYNC_TDLQGCW_WAYPOINT_UNIT = "CustomWaypointAttach"
 QuickChat.SYNC_TDLQGCW_WAYPOINT_PLACE = "CustomWaypointPlace"
 QuickChat.SYNC_TDLQGCW_WAYPOINT_REMOVE = "CustomWaypointRemove"
 QuickChat.API_VERSION = "2" -- string!
+QuickChat.SYNC_TDLQGCW_VERSION = "tdlq_gcw"
 QuickChat.WAYPOINT_RAYCAST_DISTANCE = 250000 --250m
 QuickChat.WAYPOINT_SECONDARY_CAST_RADIUS = 50 --50cm
 QuickChat.WAYPOINT_OBJECT_PRIORITY_LIST = {
@@ -1200,8 +1208,12 @@ function QuickChat:IsWaypointRegistrationAlertEnabled()
 	return self.settings.waypoints_alert_on_registration
 end
 
-function QuickChat:IsGCWCompatibilityEnabled()
-	return self.settings.compatibility_gcw_enabled
+function QuickChat:IsGCWCompatibilityReceiveEnabled()
+	return self.settings.compatibility_gcw_receive_enabled
+end
+
+function QuickChat:IsGCWCompatibilitySendEnabled()
+	return self.settings.compatibility_gcw_send_enabled
 end
 
 function QuickChat:IsDebugDrawEnabled()
@@ -1737,7 +1749,7 @@ function QuickChat:_SendWaypoint(waypoint_data) --format data and send to peers
 		for _,peer in pairs(managers.network:session():peers()) do 
 			if peer._quickchat_version == API_VERSION then
 				LuaNetworking:SendToPeer(peer:id(),self.SYNC_MESSAGE_WAYPOINT_ADD,sync_string)
-			elseif peer._quickchat_version == "tdlq_gcw" then
+			elseif peer._quickchat_version == self.SYNC_TDLQGCW_VERSION and self:IsGCWCompatibilitySendEnabled() then
 				if not tdlq_gcw_msg_id then
 					if waypoint_type == self.WAYPOINT_TYPES.UNIT then
 						tdlq_gcw_msg_id = self.SYNC_TDLQGCW_WAYPOINT_UNIT
@@ -2009,6 +2021,8 @@ function QuickChat:RemoveWaypoint(peer_id,waypoint_index) --from local player
 			if peer_version == self.API_VERSION then
 				--v2
 				LuaNetworking:SendToPeer(peer:id(),self.SYNC_MESSAGE_WAYPOINT_REMOVE,sync_string)
+			elseif self:IsGCWCompatibilitySendEnabled() then
+				LuaNetworking:SendToPeer(peer:id(),self.SYNC_TDLQGCW_WAYPOINT_REMOVE,string.format("%.1f,%.1f,%.1f",x,y,z))
 			end
 		end
 	end
@@ -2061,13 +2075,13 @@ function QuickChat:SendAcknowledgeWaypoint(peer_id,waypoint_id)
 	--not yet implemented
 end
 
-function QuickChat:ReceiveAcknowledgeWaypoint(sender,message_string)
+function QuickChat:ReceiveAcknowledgeWaypoint(peer_id,message_string)
 	--not yet implemented
 	self:_AcknowledgeWaypoint(peer_id,waypoint_id)
 end
 
 function QuickChat:ReceiveGCWAttach(peer_id,message_string)
-	self:RegisterPeer(sender,"tdlq_gcw")
+	self:RegisterPeerById(peer_id,self.SYNC_TDLQGCW_VERSION)
 	local unit_id = self.to_int(message_body)
 	local unit
 	for _, _unit in ipairs(managers.interaction._interactive_units) do
@@ -2079,7 +2093,7 @@ function QuickChat:ReceiveGCWAttach(peer_id,message_string)
 	
 	if unit then
 		local position = Vector3() --shouldn't matter much for a unit waypoint
-		self:_AddWaypoint(sender,{
+		self:_AddWaypoint(peer_id,{
 			waypoint_type = self.WAYPOINT_TYPES.UNIT,
 			label_index = nil,
 			icon_index = nil,
@@ -2092,10 +2106,10 @@ function QuickChat:ReceiveGCWAttach(peer_id,message_string)
 end
 
 function QuickChat:ReceiveGCWPlace(peer_id,message_string)
-	self:RegisterPeer(sender,"tdlq_gcw")
+	self:RegisterPeerById(peer_id,self.SYNC_TDLQGCW_VERSION)
 	local position = string.ToVector3(message_string)
 	if position then
-		self:_AddWaypoint(sender,{
+		self:_AddWaypoint(peer_id,{
 			waypoint_type = self.WAYPOINT_TYPES.POSITION,
 			label_index = nil,
 			icon_index = nil,
@@ -2108,8 +2122,8 @@ function QuickChat:ReceiveGCWPlace(peer_id,message_string)
 end
 
 function QuickChat:ReceiveGCWRemove(peer_id,message_string)
-	QuickChat:RegisterPeer(sender,"tdlq_gcw")
-	QuickChat:DisposeWaypoints(sender)
+	self:RegisterPeerById(peer_id,self.SYNC_TDLQGCW_VERSION)
+	self:DisposeWaypoints(peer_id)
 end
 
 --gets the waypoint that the player is looking at, if any
@@ -2256,23 +2270,26 @@ end
 --Networking
 
 function QuickChat:RegisterPeerById(peer_id,version)
+	self:Log("Registering peer " .. tostring(peer_id) .. " as version " .. tostring(version))
 	if peer_id then 
 		local session = managers.network:session()
 		local peer = session and session:peer(peer_id)
 		if peer then 
-			if version and not peer._quickchat_version and self:IsWaypointRegistrationAlertEnabled() then
-				local peer_name = peer:name()
-				local sender_name = managers.localization:text("qc_menu_main_title")
-				local peer_color = tweak_data.chat_colors[peer_id]
-				local alert_string_id
-				if version == self.API_VERSION then
-					alert_string_id = "qc_alert_player_registered_version_match"
-				else
-					alert_string_id = "qc_alert_player_registered_version_mismatch"
+			if version and not peer._quickchat_version then
+				peer._quickchat_version = version
+				if self:IsWaypointRegistrationAlertEnabled() then
+					local peer_name = peer:name()
+					local sender_name = managers.localization:text("qc_menu_main_title")
+					local peer_color = tweak_data.chat_colors[peer_id]
+					local alert_string_id
+					if version == self.API_VERSION then
+						alert_string_id = "qc_alert_player_registered_version_match"
+					else
+						alert_string_id = "qc_alert_player_registered_version_mismatch"
+					end
+					managers.chat:_receive_message(ChatManager.GAME,sender_name,managers.localization:text(alert_string_id,{USERNAME=peer_name,YOUR_VERSION=self.API_VERSION,PEER_VERSION=version}),peer_color)
 				end
-				managers.chat:_receive_message(ChatManager.GAME,sender_name,managers.localization:text(alert_string_id,{USERNAME=peer_name,YOUR_VERSION=self.API_VERSION,PEER_VERSION=version}),peer_color)
 			end
-			peer._quickchat_version = version
 			self._synced_waypoints[peer_id] = self._synced_waypoints[peer_id] or {}
 		end
 	end
@@ -2937,7 +2954,9 @@ Hooks:Add("NetworkReceivedData","QuickChat_NetworkReceivedData",function(sender,
 	if managers.chat and managers.chat:is_peer_muted(peer) then
 		return
 	end
-	if peer._quickchat_version == self.API_VERSION then
+	if message_id == QuickChat.SYNC_MESSAGE_REGISTER then
+		QuickChat:RegisterPeerById(sender,message_body)
+	elseif peer._quickchat_version == QuickChat.API_VERSION then
 		if message_id == QuickChat.SYNC_MESSAGE_PRESET then
 			QuickChat:ReceivePresetMessage(sender,message_body)
 		elseif message_id == QuickChat.SYNC_MESSAGE_WAYPOINT_ADD then
@@ -2946,10 +2965,8 @@ Hooks:Add("NetworkReceivedData","QuickChat_NetworkReceivedData",function(sender,
 			QuickChat:ReceiveRemoveWaypoint(sender,message_body)
 		elseif message_id == QuickChat.SYNC_MESSAGE_WAYPOINT_ACKNOWLEDGE then
 			QuickChat:ReceiveAcknowledgeWaypoint(sender,message_body)
-		elseif message_id == QuickChat.SYNC_MESSAGE_REGISTER then
-			QuickChat:RegisterPeerById(sender,message_body)
 		end
-	elseif QuickChat:IsGCWCompatibilityEnabled() then
+	elseif QuickChat:IsGCWCompatibilityReceiveEnabled() then
 		if message_id == QuickChat.SYNC_TDLQGCW_WAYPOINT_PLACE then
 			QuickChat:ReceiveGCWPlace(sender,message_body)
 		elseif message_id == QuickChat.SYNC_TDLQGCW_WAYPOINT_UNIT then
