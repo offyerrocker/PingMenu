@@ -1,6 +1,9 @@
 --TODO
 
 	--SCHEMA
+		--clean up schema of action_id vs radial_id
+			--probably need a func provided with both to get the bind data
+		
 		--allow other movement actions during radial menu? (eg. steelsight)
 			--tactical leaning compat
 				--use head position instead of cam position?
@@ -45,8 +48,7 @@
 		--inverse alpha attenuation
 		
 		--allow raycasting teammates (ai)
-		--allow mouse button binding for keyboard users
-			
+		
 		--display current gamepad mode in menu
 		--customization
 			--custom radial messages (use QKI?)
@@ -1355,7 +1357,7 @@ function QuickChat:PopulateInputCache()
 			local callback_pressed,callback_released,callback_held = self:GetBindingCallbacks(bind_data)
 			self._input_cache[button_name_ids] = {
 				radial_id = radial_id,
-				callback_type = bind_data.callback_type,
+				action_id = bind_data.action_id,
 				radial_menu = radial_menu,
 				state = false, --start un-pressed
 				button_name = button_name,
@@ -1372,7 +1374,7 @@ function QuickChat:GetBindingCallbacks(bind_data)
 	local callback_released = false
 	local callback_held = false
 	
-	if bind_data.callback_type == "radial_menu" then
+	if bind_data.action_id == "radial_menu" then
 		if bind_data.radial_id then
 			callback_pressed = function(t,dt,input_data)
 				local radial_menu = input_data.radial_menu
@@ -1403,9 +1405,14 @@ function QuickChat:GetBindingCallbacks(bind_data)
 				end
 			end
 		end
-	elseif bind_data.callback_type == "clearmywaypoints" then
-		--idk lol
+	elseif bind_data.action_id == "clearmywaypoints" then
 		callback_pressed = callback(self,self,"DisposeWaypoints",managers.network:session():local_peer():id())
+	elseif bind_data.action_id == "clearallwaypoints" then
+		callback_pressed = function()
+			for peer_id,waypoints in pairs(QuickChat._synced_waypoints) do 
+				QuickChat:DisposeWaypoints(peer_id)
+			end
+		end
 	end
 	return callback_pressed,callback_released,callback_held
 end
@@ -1425,11 +1432,12 @@ function QuickChat:GetKeybindByRadialId(radial_id)
 			return button_id,bind_data.is_mouse_button
 		end
 	end
+	return false,false
 end
 
-function QuickChat:BindButtonToMenu(button_name,radial_id,is_mouse_button)
+function QuickChat:BindButtonToMenu(button_name,is_mouse_button,radial_id)
 	return self:BindButtonData(button_name,{
-		callback_type = "radial_menu",
+		action_id = "radial_menu",
 		is_mouse_button = is_mouse_button,
 		radial_id = radial_id
 	})
@@ -1443,7 +1451,7 @@ function QuickChat:BindButtonData(keyname,bind_data)
 	self._bindings[keyname] = {
 		is_mouse_button = bind_data.is_mouse_button,
 		radial_id = bind_data.radial_id,
-		callback_type = bind_data.callback_type
+		action_id = bind_data.action_id
 	}
 end
 
@@ -1456,9 +1464,17 @@ function QuickChat:UnbindButton(keyname,skip_clear_cache)
 	end
 end
 
-function QuickChat:GetBindDataByButton(keyname)
+function QuickChat:GetBindDataByButton(keyname,is_mouse_button)
 	local bind_data = self._bindings
 	return self._bindings[keyname]
+end
+
+function QuickChat:GetKeybindByActionId(action_id,radial_id)
+	for button_name,bind_data in pairs(self._bindings) do 
+		if bind_data.action_id == action_id and bind_data.radial_id == radial_id then
+			return button_name,bind_data.is_mouse_button
+		end
+	end 
 end
 
 function QuickChat:IsGamepadModeEnabled()
@@ -1475,8 +1491,10 @@ function QuickChat:UnpackGamepadBindings()
 			for button_index,controllerbutton in ipairs(allowed_wrapper_buttons) do
 				QuickChat._allowed_binding_buttons[Idstring(controllerbutton):key()] = controllerbutton
 			end
-			for button_index,controllerbutton in ipairs(allowed_wrapper_bindings.mouse_buttons) do 
-				QuickChat._allowed_binding_mouse_buttons[Idstring(controllerbutton):key()] = controllerbutton
+			if allowed_wrapper_bindings.mouse_buttons then
+				for button_index,controllerbutton in ipairs(allowed_wrapper_bindings.mouse_buttons) do 
+					QuickChat._allowed_binding_mouse_buttons[Idstring(controllerbutton):key()] = controllerbutton
+				end
 			end
 		else
 			for controllerbutton,wrapperbutton in pairs(allowed_wrapper_buttons) do
@@ -1689,7 +1707,7 @@ function QuickChat:AddWaypoint(params) --called whenever local player attempts t
 	local aimed_index,aimed_peerid,aimed_wp_data = self:GetAimedWaypoint(true,dot_aim_threshold,peer_id,nil)
 	if aimed_index then
 		if aimed_peerid == peer_id then
-			self:RemoveWaypoint(peer_id,aimed_index)
+			self:RemoveWaypoint(aimed_index)
 		else
 			self:SendAcknowledgeWaypoint(peer_id,aimed_index)
 		end
@@ -1781,7 +1799,7 @@ function QuickChat:AddWaypoint(params) --called whenever local player attempts t
 				if waypoint_data.unit == unit_result then
 					--if the local player tags the same unit, 
 					--just remove the waypoint instead
-					self:RemoveWaypoint(peer_id,i)
+					self:RemoveWaypoint(i)
 					return
 				end
 			end
@@ -2123,7 +2141,7 @@ function QuickChat:_AddWaypoint(peer_id,waypoint_data) --called for both local p
 	end
 end
 
-function QuickChat:RemoveWaypoint(peer_id,waypoint_index) --from local player
+function QuickChat:RemoveWaypoint(waypoint_index) --from local player
 	local waypoint_data = self._synced_waypoints[peer_id][waypoint_index]
 	if waypoint_data then
 		local to_int = self.to_int
@@ -2165,12 +2183,17 @@ function QuickChat:OnPeerDisconnected(peer_id)
 end
 
 function QuickChat:DisposeWaypoints(peer_id)
+	local is_local_player = peer_id == managers.network:session():local_peer():id()
 	local peer_waypoints = peer_id and self._synced_waypoints[peer_id]
 	if peer_waypoints then
 		for waypoint_index=#peer_waypoints,1,-1 do
-			local waypoint_data = table.remove(peer_waypoints,waypoint_index)
-			if alive(waypoint_data.panel) then
-				waypoint_data.panel:parent():remove(waypoint_data.panel)
+			if is_local_player then
+				self:RemoveWaypoint(waypoint_index)
+			else
+				local waypoint_data = table.remove(peer_waypoints,waypoint_index)
+				if alive(waypoint_data.panel) then
+					waypoint_data.panel:parent():remove(waypoint_data.panel)
+				end
 			end
 		end
 	end
@@ -2983,29 +3006,20 @@ Hooks:Add("MenuManagerPopulateCustomMenus","QuickChat_MenuManagerPopulateCustomM
 				break
 			end
 		end
-	--[[
-		local item = parent_menu._items_list[1 + (num_items - index)]
-		if item then 
-			item._parameters.text_id = new_text
-			item._parameters.gui_node:_reload_item(item)
-		end
-		--]]
 	end
 	
-	for i,radial_id in ipairs(radial_keys) do 
-		local radial_data = QuickChat._radial_menu_params[radial_id]
+	local function get_button_display_name(name,is_mouse)
+		return utf8.to_upper(QuickChat:GetKeyDisplayName(name,is_mouse))
+	end
+	
+	--here!!!!!----------------------------------------------
+	local function generate_menu_callback(current_button_name,current_is_mouse_button,do_binding_cb,action_id,current_radial_id)
+	--action_id,do_binding_cb,current_button_name,header_name)
 		
 		local current_binding_text = unbound_text
-		local current_button,_is_mouse_button = QuickChat:GetKeybindByRadialId(radial_id)
-		if current_button then
-			current_binding_text = managers.localization:text("qc_bind_status_title",{KEYNAME=utf8.to_upper(QuickChat:GetKeyDisplayName(current_button,_is_mouse_button))})
-		end
-		
-		local radial_menu_name
-		if radial_data.name_id then
-			radial_menu_name = managers.localization:text(radial_data.name_id)
-		else
-			radial_menu_name = radial_id
+		local current_key_display_name = get_button_display_name(current_button_name,current_is_mouse_button)
+		if current_button_name then
+			current_binding_text = managers.localization:text("qc_bind_status_title",{KEYNAME=current_key_display_name})
 		end
 		
 		local menu_callback = function(self)
@@ -3024,7 +3038,7 @@ Hooks:Add("MenuManagerPopulateCustomMenus","QuickChat_MenuManagerPopulateCustomM
 			end
 			QuickChat._quickmenu_item = QuickMenu:new(
 				managers.localization:text(title),
-				managers.localization:text(desc,{BTN_UNBIND=utf8.to_upper(button_unbind_name),BTN_CANCEL=utf8.to_upper(button_cancel_name)}),
+				managers.localization:text(desc,{BTN_UNBIND=get_button_display_name(button_unbind_name),BTN_CANCEL=get_button_display_name(button_cancel_name)}),
 				{
 					{
 						text = managers.localization:text("qc_menu_bind_prompt_unbind"),
@@ -3049,18 +3063,22 @@ Hooks:Add("MenuManagerPopulateCustomMenus","QuickChat_MenuManagerPopulateCustomM
 			
 			--called on pressing a button in the bind dialog
 			QuickChat._callback_bind_button = function(self,button_name,is_mouse_button)
+				local button_display_name = get_button_display_name(button_name,is_mouse_button)
 --				self:Log("QuickChat: Found button " .. tostring(button_name))
+				
+				--hide current dialog boxes (waiting for bind input, etc)
 				if self._quickmenu_item then 
 					self._quickmenu_item:Hide()
 					self._quickmenu_item = nil
 				end
+				
 				if button_name == button_unbind_name then 
 					--unbind and close
-					local _button_name,__is_mouse_button = self:GetKeybindByRadialId(radial_id)
+					local _button_name,_is_mouse_button = self:GetKeybindByActionId(action_id)
 					if _button_name then
 						QuickMenu:new(
 							managers.localization:text("qc_menu_bind_prompt_unbound_title"),
-							managers.localization:text("qc_menu_bind_prompt_unbound_desc",{KEYNAME=utf8.to_upper(QuickChat:GetKeyDisplayName(_button_name,__is_mouse_button)),RADIAL=radial_id}),
+							managers.localization:text("qc_menu_bind_prompt_unbound_desc",{KEYNAME=get_button_display_name(_button_name,_is_mouse_button),ACTION=current_action_id}),
 							{
 								{
 									text = managers.localization:text("qc_menu_dialog_accept"),
@@ -3071,18 +3089,34 @@ Hooks:Add("MenuManagerPopulateCustomMenus","QuickChat_MenuManagerPopulateCustomM
 						)
 					end
 					self:UnbindButton(_button_name,false)
-					refresh_menu_item(parent_menu_id,"qc_menu_bind_button_" .. radial_id,unbound_text)
+					refresh_menu_item(parent_menu_id,"qc_menu_bind_button_" .. current_action_id,unbound_text)
 				elseif button_name == button_cancel_name then
 					--cancel, do nothing
 					return
 				else
+					local conflict_action_name
+					for _button_name,bind_data in pairs(self._bindings) do 
+						if _button_name == button_name then
+							--button match found
+							
+							if (not not is_mouse_button) == (not not bind_data.is_mouse_button) then
+								if action_id ~= bind_data.action_id and current_radial_id ~= bind_data.radial_id then
+									conflict_action_name = bind_data.radial_id or bind_data.action_id
+									--conflict
+									break
+								end
+							end
+							--no conflict
+							break
+						end
+					end
 					
-					--internal keybind conflict detection
-					local bind_data = self:GetBindDataByButton(button_name)
-					if bind_data and bind_data.radial_id and bind_data.radial_id ~= radial_id then
+					if conflict_action_name then
+						--internal keybind conflict detection
+						--check if the new button is already bound to something else
 						QuickMenu:new(
 							managers.localization:text("qc_menu_bind_prompt_conflict_title"),
-							managers.localization:text("qc_menu_bind_prompt_conflict_desc",{KEYNAME=utf8.to_upper(QuickChat:GetKeyDisplayName(button_name,is_mouse_button)),RADIAL=radial_id}),
+							managers.localization:text("qc_menu_bind_prompt_conflict_desc",{KEYNAME=button_display_name,ACTION=conflict_action_name}),
 							{
 								{
 									text = managers.localization:text("qc_menu_dialog_accept"),
@@ -3094,15 +3128,17 @@ Hooks:Add("MenuManagerPopulateCustomMenus","QuickChat_MenuManagerPopulateCustomM
 						return
 					end
 					
-					--unbind previous button bound to this radial menu
-					local _button_name = self:GetKeybindByRadialId(radial_id)
-					self:UnbindButton(_button_name,false)
+					--unbind previous button bound to this action
+					self:UnbindButton(current_button_name,false)
 					
-					self:BindButtonToMenu(button_name,radial_id,is_mouse_button)
-					
+					if do_binding_cb then
+						do_binding_cb(button_name,is_mouse_button)
+					else
+						self:Log("Error: Attempted to bind button " .. tostring(button_display_name) .. " to invalid action " .. tostring(action_id))
+					end
 					QuickMenu:new(
 						managers.localization:text("qc_bind_status_success_title"),
-						managers.localization:text("qc_bind_status_success_desc",{KEYNAME=utf8.to_upper(QuickChat:GetKeyDisplayName(button_name,is_mouse_button)),RADIAL=radial_id}),
+						managers.localization:text("qc_bind_status_success_desc",{KEYNAME=button_display_name,ACTION=action_id}),
 						{
 							{
 								text = managers.localization:text("qc_menu_dialog_accept"),
@@ -3113,7 +3149,7 @@ Hooks:Add("MenuManagerPopulateCustomMenus","QuickChat_MenuManagerPopulateCustomM
 					)
 					self:ClearInputCache()
 					self:PopulateInputCache()
-					refresh_menu_item(parent_menu_id,"qc_menu_bind_button_" .. radial_id,managers.localization:text("qc_bind_status_title",{KEYNAME=utf8.to_upper(QuickChat:GetKeyDisplayName(button_name,is_mouse_button))}))
+					refresh_menu_item(parent_menu_id,"qc_menu_bind_button_" .. (current_radial_id or action_id),managers.localization:text("qc_bind_status_title",{KEYNAME=button_display_name}))
 				end
 				
 				self:Save()
@@ -3122,19 +3158,62 @@ Hooks:Add("MenuManagerPopulateCustomMenus","QuickChat_MenuManagerPopulateCustomM
 			
 			QuickChat:AddControllerInputListener()
 		end
-		--end of menu callback
+		
+		return menu_callback
+	end
+	--end of callback generator
+	
+	for i,radial_id in ipairs(radial_keys) do 
+		local radial_data = QuickChat._radial_menu_params[radial_id]
+		
+		local current_button,current_is_mouse_button = QuickChat:GetKeybindByRadialId(radial_id)
+		
+		local radial_menu_name
+		if radial_data.name_id then
+			radial_menu_name = managers.localization:text(radial_data.name_id)
+		else
+			radial_menu_name = radial_id
+		end
+		
+		local bind_cb = function(button_name,is_mouse_button)
+			QuickChat:BindButtonToMenu(button_name,is_mouse_button,radial_id)
+		end
+		
+		local menu_callback = generate_menu_callback(current_button,current_is_mouse_button,bind_cb,"radial_menu",radial_id)
+		
+		local current_button_display_name = get_button_display_name(current_button,current_is_mouse_button)
 		
 		add_binding_button({
 			id = radial_id,
 			header_title = radial_menu_name,
 			header_desc = "",
-			button_title = current_binding_text,
+			button_title = managers.localization:text("qc_bind_status_title",{KEYNAME=current_button_display_name}),
 			button_desc = managers.localization:text("qc_bind_status_desc"),
 			callback = menu_callback,
 			parent_menu_id = parent_menu_id
 		})
 	end
+	--[[
+	add_binding_button({
+		id = "clearmywaypoints",
+		header_title = managers.localization:text("qc_menu_clear_my_waypoints"),
+		header_desc = "",
+		button_title = current_binding_text,
+		button_desc = managers.localization:text("qc_bind_status_desc"),
+		callback = nil,
+		parent_menu_id = parent_menu_id
+	})
 	
+	add_binding_button({
+		id = "clearallwaypoints",
+		header_title = managers.localization:text("qc_menu_clear_my_waypoints"),
+		header_desc = "",
+		button_title = current_binding_text,
+		button_desc = managers.localization:text("qc_bind_status_desc"),
+		callback = nil,
+		parent_menu_id = parent_menu_id
+	})
+	--]]
 	for i=#final_items,1,-1 do
 		local menu_data = final_items[i]
 		QuickChat.add_menu_option_from_data(i,menu_data,menu_data.menu_id,QuickChat.settings,QuickChat.default_settings)
