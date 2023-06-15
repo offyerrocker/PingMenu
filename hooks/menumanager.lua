@@ -29,7 +29,7 @@
 		--no attenuate during anim intro period
 		
 		--modifier key to force placement
-		--modifier key to uh... something
+		--modifier key to go through glass
 		--modifier key for timers
 		
 		--button/keybind to remove all waypoints
@@ -67,7 +67,7 @@
 		--"acknowledged" prompt and icon popup
 			--think "read receipt" 
 	--BUGS
-		--can't rebind midgame
+		--(PRIORITY) can't rebind midgame
 		--crash 3171 on refresh menu midgame
 		--TimerManager:game():time() between client and host is desynced; use a different timer
 		--QuickChat detects controller mode if a controller is plugged in, even if keyboard is the "main" input
@@ -996,7 +996,7 @@ QuickChat._keybind_callbacks = {
 					QuickChat._last_menu = radial_menu
 				end
 			else
-				Log("No radial menu: " .. tostring(action_data.sub_type))
+--				self:Log("No radial menu: " .. tostring(action_data.sub_type))
 			end
 		end,
 		callback_released = function(t,dt,action_data)
@@ -1592,6 +1592,7 @@ function QuickChat:GetController()
 	local controller
 	if self:IsGamepadModeEnabled() then 
 		local cm = managers.controller
+		--get_start_pressed_controller_index
 		local index = Global.controller_manager.default_wrapper_index or cm:get_preferred_default_wrapper_index()
 		
 		local controller_index = cm._wrapper_to_controller_list[index][1]
@@ -2716,7 +2717,9 @@ function QuickChat:UpdateGame(t,dt)
 			else
 				if input_data.state then
 					--on released
-					input_data.callback_released(t,dt,input_data.action_data)
+					if input_data.callback_released then
+						input_data.callback_released(t,dt,input_data.action_data)
+					end
 					input_data.hold_start_t = nil
 				end
 			end
@@ -2790,7 +2793,7 @@ function QuickChat:UpdateWaypoints(t,dt)
 				else
 					--is position based (wp_position is already set by default)
 				end
-
+				
 				if is_valid then
 					local distance = mvec3_distance(camera_position,wp_position)
 					waypoint_data.desc:set_text(string.format("%0.1fm",distance / 100))
@@ -2826,7 +2829,7 @@ function QuickChat:UpdateWaypoints(t,dt)
 					
 					local x_r = math.clamp(panel_x,0,pw) / pw
 					local y_r = math.clamp(panel_y,0,ph) / ph
-
+					
 					if c_x ~= 0 or c_y ~= 0 then
 						hud_direction = math.atan(c_y/c_x)
 						if c_x < 0 then
@@ -3181,7 +3184,7 @@ Hooks:Add("MenuManagerPopulateCustomMenus","QuickChat_MenuManagerPopulateCustomM
 	end
 	
 	--returns the callback that is called when the button is pressed
-	local function generate_menu_callback(action_type,action_subtype,do_binding_cb)
+	local function generate_menu_callback(action_type,action_subtype)
 		local current_binding_text = UNBOUND_TEXT
 		
 		--called when button is pressed
@@ -3190,6 +3193,7 @@ Hooks:Add("MenuManagerPopulateCustomMenus","QuickChat_MenuManagerPopulateCustomM
 			--get the current bind for this action
 			local current_button_name,current_is_mouse_button = QuickChat:GetButtonByAction(action_type,action_subtype)
 			local action_id = QuickChat:GetActionDisplayName(action_type,action_subtype)
+			
 			local current_key_display_name = get_button_display_name(current_button_name,current_is_mouse_button)
 			if current_button_name then
 				current_binding_text = managers.localization:text("qc_bind_status_title",{KEYNAME=current_key_display_name})
@@ -3294,8 +3298,11 @@ Hooks:Add("MenuManagerPopulateCustomMenus","QuickChat_MenuManagerPopulateCustomM
 					--unbind previous button bound to this action
 					self:UnbindButton(current_button_name,current_is_mouse_button,true)
 					
-					if do_binding_cb then
-						do_binding_cb(button_name,is_mouse_button)
+					if action_type then
+						self:BindButtonData(button_name,is_mouse_button,{
+							action_type = action_type,
+							sub_type = action_subtype
+						})
 					else
 						self:Log("Error: Attempted to bind button " .. tostring(button_display_name) .. " to invalid action " .. tostring(action_id))
 					end
@@ -3341,11 +3348,7 @@ Hooks:Add("MenuManagerPopulateCustomMenus","QuickChat_MenuManagerPopulateCustomM
 			radial_menu_name = radial_id
 		end
 		
-		local bind_cb = function(button_name,is_mouse_button)
-			QuickChat:BindButtonToRadial(button_name,is_mouse_button,radial_id)
-		end
-		
-		local menu_callback = generate_menu_callback("radial",radial_id,bind_cb)
+		local menu_callback = generate_menu_callback("radial",radial_id)
 		
 		local current_binding_text
 		if current_button then
@@ -3355,35 +3358,55 @@ Hooks:Add("MenuManagerPopulateCustomMenus","QuickChat_MenuManagerPopulateCustomM
 		end
 		add_binding_button({
 			id = action_id,
-			header_title = action_id,
-			header_desc = "",
+			header_title = managers.localization:text("qc_menu_keybind_radial_title",{NAME=action_id}),
+			header_desc = managers.localization:text("qc_menu_keybind_radial_desc"),
 			button_title = current_binding_text,
 			button_desc = managers.localization:text("qc_bind_status_desc"),
 			callback = menu_callback,
 			parent_menu_id = parent_menu_id
 		})
 	end
-	--[[
-	add_binding_button({
-		id = "clearmywaypoints",
-		header_title = managers.localization:text("qc_menu_clear_my_waypoints"),
-		header_desc = "",
-		button_title = current_binding_text,
-		button_desc = managers.localization:text("qc_bind_status_desc"),
-		callback = nil,
-		parent_menu_id = parent_menu_id
-	})
 	
-	add_binding_button({
-		id = "clearallwaypoints",
-		header_title = managers.localization:text("qc_menu_clear_my_waypoints"),
-		header_desc = "",
-		button_title = current_binding_text,
-		button_desc = managers.localization:text("qc_bind_status_desc"),
-		callback = nil,
-		parent_menu_id = parent_menu_id
-	})
-	--]]
+	
+	do
+		local current_binding_text
+		local current_button,current_is_mouse_button = QuickChat:GetButtonByAction("waypoints_clear_own","")
+		if current_button then
+			current_binding_text = managers.localization:text("qc_bind_status_title",{KEYNAME=get_button_display_name(current_button,current_is_mouse_button)})
+		else
+			current_binding_text = UNBOUND_TEXT
+		end
+		
+		add_binding_button({
+			id = "waypoints_clear_own",
+			header_title = managers.localization:text("qc_menu_keybind_clear_my_waypoints_title"),
+			header_desc = managers.localization:text("qc_menu_keybind_clear_my_waypoints_desc"),
+			button_title = current_binding_text,
+			button_desc = managers.localization:text("qc_bind_status_desc"),
+			callback = generate_menu_callback("waypoints_clear_own",""),
+			parent_menu_id = parent_menu_id
+		})
+	end
+	
+	do
+		local current_binding_text
+		local current_button,current_is_mouse_button = QuickChat:GetButtonByAction("waypoints_clear_all","")
+		if current_button then
+			current_binding_text = managers.localization:text("qc_bind_status_title",{KEYNAME=get_button_display_name(current_button,current_is_mouse_button)})
+		else
+			current_binding_text = UNBOUND_TEXT
+		end
+		add_binding_button({
+			id = "waypoints_clear_all",
+			header_title = managers.localization:text("qc_menu_keybind_clear_all_waypoints_title"),
+			header_desc = managers.localization:text("qc_menu_keybind_clear_all_waypoints_desc"),
+			button_title = current_binding_text,
+			button_desc = managers.localization:text("qc_bind_status_desc"),
+			callback = generate_menu_callback("waypoints_clear_all",""),
+			parent_menu_id = parent_menu_id
+		})
+	end
+	
 	for i=#final_items,1,-1 do
 		local menu_data = final_items[i]
 		QuickChat.add_menu_option_from_data(i,menu_data,menu_data.menu_id,QuickChat.settings,QuickChat.default_settings)
