@@ -1,6 +1,5 @@
-<mod name="QuickChat" author="Offyerrocker" color="Color(0,0,1)">
-	<AssetUpdates name="qc_assetupdates" id="28014" version="2.0.0" provider="modworkshop" install_directory = "mods/" version_is_number="false" core_class="QuickChatCore"/>
-
+<mod name="QuickChat" author="Offyerrocker" color="Color(0,0,1)" <!--core_class="QuickChatCore" --> >
+	<AssetUpdates name="qc_assetupdates" id="28014" version="2.0.0" provider="modworkshop" install_directory = "mods/" version_is_number="false"/>
 	<AddFiles name="qc_addfiles" directory="assets">
 		<texture path="guis/textures/radial_menu/cursor"/>
 		<texture path="guis/textures/radial_menu/darklight"/>

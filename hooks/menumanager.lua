@@ -1,5 +1,13 @@
 --TODO
 
+
+-- when neutral pinging an existing ping, remove it
+-- when specific pinging an existing ping, replace it
+
+-- acknowledge: indicator for which teammates have quickchat/gcw
+
+
+
 	--SCHEMA
 		--validate buttons on startup; no duplicate actions in binds
 		
@@ -100,25 +108,27 @@ QuickChat._bindings_name = "bindings_$WRAPPER.json"
 QuickChat._settings_name = "settings.json"
 QuickChat.default_settings = {
 	debug_draw = false,
-	compatibility_gcw_send_enabled = true,
-	compatibility_gcw_receive_enabled = true,
+	--compatibility_gcw_send_enabled = true, -- deprecated/combined into compatibility_gcw_enabled
+	--compatibility_gcw_receive_enabled = true, -- deprecated/combined into compatibility_gcw_enabled
+	compatibility_gcw_enabled = true,
 	waypoints_alert_on_registration = true,
 	waypoints_max_count = 1,
 	waypoints_aim_dot_threshold = 0.995,
-	waypoints_attenuate_alpha_enabled = true,
-	waypoints_attenuate_alpha_dot_threshold = 0.96,
+	waypoints_attenuate_alpha_mode = 1, -- 1: do not fadeout. 2: fadeout at screen center. 3: fadeout at screen edges.
+	waypoints_attenuate_dot_threshold = 0.96,
 	waypoints_attenuate_alpha_min = 0.5
 }
+
 QuickChat.settings = table.deep_map_copy(QuickChat.default_settings) --general user pref
 QuickChat.sort_settings = {
 	"debug_draw",
+	"compatibility_gcw_enabled",
 	"waypoints_alert_on_registration",
 	"waypoints_max_count",
 	"waypoints_aim_dot_threshold",
-	"waypoints_attenuate_alpha_enabled",
-	"waypoints_attenuate_alpha_dot_threshold",
-	"waypoints_attenuate_alpha_min",
-	"compatibility_gcw_enabled"
+	"waypoints_attenuate_alpha_mode",
+	"waypoints_attenuate_dot_threshold",
+	"waypoints_attenuate_alpha_min"
 }
 QuickChat._bindings = {}
 
@@ -137,7 +147,7 @@ QuickChat.SYNC_MESSAGE_WAYPOINT_REMOVE = "QuickChat_RemoveWaypoint"
 QuickChat.SYNC_TDLQGCW_WAYPOINT_UNIT = "CustomWaypointAttach"
 QuickChat.SYNC_TDLQGCW_WAYPOINT_PLACE = "CustomWaypointPlace"
 QuickChat.SYNC_TDLQGCW_WAYPOINT_REMOVE = "CustomWaypointRemove"
-QuickChat.API_VERSION = "2" -- string!
+QuickChat.API_VERSION = "3" -- string!
 QuickChat.SYNC_TDLQGCW_VERSION = "tdlq_gcw"
 QuickChat.WAYPOINT_RAYCAST_DISTANCE = 250000 --250m
 QuickChat.WAYPOINT_SECONDARY_CAST_RADIUS = 50 --50cm
@@ -939,47 +949,50 @@ QuickChat._message_presets = {
 	"qc_ptm_general_leaving_last_game",		--17
 	"qc_ptm_general_healembargo",			--18
 	"qc_ptm_general_achievementhunting",	--19
-	"qc_ptm_comms_help",					--20
-	"qc_ptm_comms_follow",					--21
-	"qc_ptm_comms_attack",					--22
-	"qc_ptm_comms_defend",					--23
-	"qc_ptm_comms_regroup",					--24
-	"qc_ptm_comms_reviving",				--25
-	"qc_ptm_comms_comehere",				--26
-	"qc_ptm_comms_caution",					--27
-	"qc_ptm_comms_opening_door",			--28
-	"qc_ptm_comms_jammed_drill",			--29
-	"qc_ptm_comms_jammed_hack",				--30
-	"qc_ptm_direction_left",				--31
-	"qc_ptm_direction_right",				--32
-	"qc_ptm_direction_up",					--33
-	"qc_ptm_direction_down",				--34
-	"qc_ptm_direction_forward",				--35
-	"qc_ptm_direction_backward",			--36
-	"qc_ptm_tactic_ask_stealth",			--37
-	"qc_ptm_tactic_ask_hybrid",				--38
-	"qc_ptm_tactic_ask_loud",				--39
-	"qc_ptm_tactic_suggest_stealth",		--40
-	"qc_ptm_tactic_suggest_hybrid",			--41
-	"qc_ptm_tactic_suggest_loud",			--42
-	"qc_ptm_need_docbag",					--43
-	"qc_ptm_need_fak",						--44
-	"qc_ptm_need_ammo",						--45
-	"qc_ptm_need_ecm",						--46
-	"qc_ptm_need_sentrygun",				--47
-	"qc_ptm_need_sentrygun_silent",			--48
-	"qc_ptm_need_tripmine",					--49
-	"qc_ptm_need_shapedcharge",				--50
-	"qc_ptm_need_grenades",					--51
-	"qc_ptm_need_convert",					--52
-	"qc_ptm_need_ties",						--53
-	"qc_ptm_enemy_sniper",					--54
-	"qc_ptm_enemy_cloaker",					--55
-	"qc_ptm_enemy_taser",					--56
-	"qc_ptm_enemy_dozer",					--57
-	"qc_ptm_enemy_medic",					--58
-	"qc_ptm_enemy_shield",					--59
-	"qc_ptm_enemy_winters"					--60
+	"qc_ptm_comms_claim",					--20
+	"qc_ptm_comms_help",					--21
+	"qc_ptm_comms_follow",					--22
+	"qc_ptm_comms_attack",					--23
+	"qc_ptm_comms_defend",					--24
+	"qc_ptm_comms_regroup",					--25
+	"qc_ptm_comms_reviving",				--26
+	"qc_ptm_comms_comehere",				--27
+	"qc_ptm_comms_caution",					--28
+	"qc_ptm_comms_opening_door",			--29
+	"qc_ptm_comms_jammed_drill",			--30
+	"qc_ptm_comms_jammed_hack",				--31
+	"qc_ptm_direction_left",				--32
+	"qc_ptm_direction_right",				--33
+	"qc_ptm_direction_up",					--34
+	"qc_ptm_direction_down",				--35
+	"qc_ptm_direction_forward",				--36
+	"qc_ptm_direction_backward",			--37
+	"qc_ptm_tactic_ask_stealth",			--38
+	"qc_ptm_tactic_ask_hybrid",				--39
+	"qc_ptm_tactic_ask_loud",				--40
+	"qc_ptm_tactic_suggest_stealth",		--41
+	"qc_ptm_tactic_suggest_hybrid",			--42
+	"qc_ptm_tactic_suggest_loud",			--43
+	"qc_ptm_need_docbag",					--44
+	"qc_ptm_need_fak",						--45
+	"qc_ptm_need_ammo",						--46
+	"qc_ptm_need_ecm",						--47
+	"qc_ptm_need_sentrygun",				--48
+	"qc_ptm_need_sentrygun_silent",			--49
+	"qc_ptm_need_tripmine",					--50
+	"qc_ptm_need_shapedcharge",				--51
+	"qc_ptm_need_grenades",					--52
+	"qc_ptm_need_convert",					--53
+	"qc_ptm_need_ties",						--54
+	"qc_ptm_enemy_sniper",					--55
+	"qc_ptm_enemy_cloaker",					--56
+	"qc_ptm_enemy_taser",					--57
+	"qc_ptm_enemy_dozer",					--58
+	"qc_ptm_enemy_medic",					--59
+	"qc_ptm_enemy_shield",					--60
+	"qc_ptm_enemy_msniper",					--61
+	"qc_ptm_enemy_mshield",					--62
+	"qc_ptm_enemy_winters"					--63
 }
 
 QuickChat._radial_menus = {} --generated radial menus
@@ -1039,6 +1052,12 @@ QuickChat._keybind_callbacks = {
 
 QuickChat._callback_bind_button = nil --dynamically set
 QuickChat._updaters = {}
+
+QuickChat.MENU_IDS = {
+	MENU_MAIN = "quickchat_menu_main",
+	MENU_BINDS = "quickchat_menu_binds",
+	MENU_SETTINGS = "quickchat_menu_settings"
+}
 
 QuickChat._populated_menus = {}
 QuickChat._queued_menus = {}
@@ -1249,20 +1268,21 @@ function QuickChat:GetIconDataByIndex(icon_index)
 	end
 end
 
+-- near aim threshold for detecting pinging an existing waypoint
 function QuickChat:GetWaypointAimDotThreshold()
 	return self.settings.waypoints_aim_dot_threshold
 end	
 
 function QuickChat:GetWaypointAttenuateDotThreshold()
-	return self.settings.waypoints_attenuate_alpha_dot_threshold
+	return self.settings.waypoints_attenuate_dot_threshold
 end
 
 function QuickChat:GetWaypointAttenuateAlphaMin()
 	return self.settings.waypoints_attenuate_alpha_min
 end
 
-function QuickChat:IsWaypointAttenuateAlphaEnabled()
-	return self.settings.waypoints_attenuate_alpha_enabled
+function QuickChat:GetWaypointAttenuateAlphaMode()
+	return self.settings.waypoints_attenuate_alpha_mode
 end
 
 function QuickChat:IsWaypointRegistrationAlertEnabled()
@@ -1270,11 +1290,11 @@ function QuickChat:IsWaypointRegistrationAlertEnabled()
 end
 
 function QuickChat:IsGCWCompatibilityReceiveEnabled()
-	return self.settings.compatibility_gcw_receive_enabled
+	return self.settings.compatibility_gcw_enabled
 end
 
 function QuickChat:IsGCWCompatibilitySendEnabled()
-	return self.settings.compatibility_gcw_send_enabled
+	return self.settings.compatibility_gcw_enabled
 end
 
 function QuickChat:IsDebugDrawEnabled()
@@ -2758,9 +2778,12 @@ function QuickChat:UpdateWaypoints(t,dt)
 	mrot_y(camera_rotation,tmp_cam_fwd)
 	
 	local get_unit_waypoint_position = self.get_unit_waypoint_position
-	local waypoint_attenuate_alpha_enabled = self:IsWaypointAttenuateAlphaEnabled()
+	local waypoint_attenuate_alpha_mode = self:GetWaypointAttenuateAlphaMode()
 	local waypoint_attenuate_alpha_min = self:GetWaypointAttenuateAlphaMin()
 	local waypoint_attenuate_dot_threshold = self:GetWaypointAttenuateDotThreshold()
+	
+	local waypoint_reverse_dot = waypoint_attenuate_alpha_mode == 3
+	
 	
 --	local player = managers.player:local_player()
 	for peer_id,peer_data in pairs(self._synced_waypoints) do 
@@ -2849,22 +2872,31 @@ function QuickChat:UpdateWaypoints(t,dt)
 							hud_direction = hud_direction + 180
 						end
 					end
-					
 				end
 --				Console:SetTracker(hud_direction,2)
 
 				if new_waypoint_state == "offscreen" then
 					arrow:set_rotation(hud_direction)
 				elseif new_waypoint_state == "onscreen" then
-					if waypoint_attenuate_alpha_enabled then
-						local dot_alpha,d_dot
+					if waypoint_attenuate_alpha_mode == 1 then
+						waypoint_data.panel:set_alpha(1)
+					else
+						local dot_alpha
 						if dot > waypoint_attenuate_dot_threshold then
-							d_dot = dot - waypoint_attenuate_dot_threshold
-							dot_alpha = math.max(1-(d_dot/(1-waypoint_attenuate_dot_threshold)),waypoint_attenuate_alpha_min)
+							if waypoint_reverse_dot then 
+								dot_alpha = waypoint_attenuate_alpha_min + (1-waypoint_attenuate_alpha_min) * (dot - waypoint_attenuate_dot_threshold) / (1 - waypoint_attenuate_dot_threshold)
+							else
+								dot_alpha = waypoint_attenuate_alpha_min + (1-waypoint_attenuate_alpha_min) * (1-(dot - waypoint_attenuate_dot_threshold) / (1 - waypoint_attenuate_dot_threshold))
+							end
+							--dot_alpha = math.max(1-(d_dot/(1-waypoint_attenuate_dot_threshold)),waypoint_attenuate_alpha_min)
 						else
-							dot_alpha = 1
+							if waypoint_reverse_dot then
+								dot_alpha = waypoint_attenuate_alpha_min
+							else
+								dot_alpha = 1
+							end
 						end
---						Console:SetTracker(string.format("%0.5f / %0.2f / %0.2f",dot,d_dot or -1,dot_alpha),1)
+						--Console:SetTracker(string.format("%0.5f / %0.2f / a= %0.2f",dot,(dot - waypoint_attenuate_dot_threshold) or -1,dot_alpha),1)
 						waypoint_data.panel:set_alpha(dot_alpha)
 					end
 				end
@@ -2893,7 +2925,7 @@ function QuickChat:UpdateWaypoints(t,dt)
 					if new_waypoint_state == "offscreen" then
 						arrow_texture,arrow_texture_rect = self:GetIconDataByIndex(24) --arrow
 					elseif new_waypoint_state == "onscreen" then
-						waypoint_data.panel:set_alpha(1)
+						--waypoint_data.panel:set_alpha(1)
 						arrow:set_rotation(0)
 						arrow_texture,arrow_texture_rect = self:GetIconDataByIndex(152) --dot
 					end
@@ -2985,15 +3017,14 @@ end
 
 --Menu Creation and other hooks
 
-function QuickChat.add_menu_option_from_data(i,menu_data,parent_menu_id,settings,default_settings)
+function QuickChat.add_menu_option_from_data(priority,menu_data,parent_menu_id,settings,default_settings)
+	-- priority can be nil
 	if not parent_menu_id then 
 		QuickChat:Log("add_menu_option_from_data(): bad parent menu id!")
 		return
 	end
 	
-	local priority = i
 	local menu_type = menu_data.type
-	
 	local item_id = menu_data.id
 	local title_id = menu_data.title
 	local desc_id = menu_data.description or menu_data.desc
@@ -3005,7 +3036,7 @@ function QuickChat.add_menu_option_from_data(i,menu_data,parent_menu_id,settings
 	
 	if menu_type == "menu" then 
 		QuickChat._populated_menus[item_id] = {
-			menu = MenuHelper:NewMenu(item_id),
+			menu = MenuHelper:GetMenu(item_id) or MenuHelper:NewMenu(item_id),
 			
 			area_bg = menu_data.area_bg,
 			back_callback = menu_data.back_callback,
@@ -3105,22 +3136,39 @@ function QuickChat.add_menu_option_from_data(i,menu_data,parent_menu_id,settings
 	end
 end
 
+
 Hooks:Add("MenuManagerSetupCustomMenus","QuickChat_MenuManagerSetupCustomMenus",function(menu_manager, nodes)
 	QuickChat:UnpackGamepadBindings()
 	QuickChat:Load()
 	QuickChat:LoadCustomRadials()
 	
-	MenuHelper:NewMenu("quickchat_menu_main")
+	MenuHelper:NewMenu(QuickChat.MENU_IDS.MENU_MAIN)
+	
+	-- todo integrate this into the menu building helper func
+	MenuHelper:NewMenu(QuickChat.MENU_IDS.MENU_BINDS)
+	MenuHelper:NewMenu(QuickChat.MENU_IDS.MENU_SETTINGS)
+	--[[
+	-- add binds submenu to main menu
+	QuickChat.add_menu_option_from_data(nil,{
+		id = parent_menu_id,
+		title = "qc_menu_binds_title",
+		desc = "qc_menu_binds_desc",
+		
+		area_bg = "none",
+		back_callback = "callback_menu_quickchat_back",
+		focus_changed_callback = nil
+	},QuickChat.MENU_IDS.MENU_MAIN,QuickChat.settings,QuickChat.default_settings)
+	--]]
 end)
 
 Hooks:Add("MenuManagerPopulateCustomMenus","QuickChat_MenuManagerPopulateCustomMenus",function(menu_manager, nodes)
 	
-	local quickchat_main_menu_id = "quickchat_menu_main"
 	local UNBOUND_TEXT = managers.localization:text("qc_bind_status_unbound")
 	
-	local parent_menu_id = quickchat_main_menu_id
+	local parent_menu_id = QuickChat.MENU_IDS.MENU_BINDS
 	
 	local final_items = {}
+	
 	local function add_binding_button(data)
 		local id = tostring(data.id)
 		local header_id = "qc_menu_bind_header_" .. id
@@ -3367,7 +3415,6 @@ Hooks:Add("MenuManagerPopulateCustomMenus","QuickChat_MenuManagerPopulateCustomM
 		})
 	end
 	
-	
 	do
 		local current_binding_text
 		local current_button,current_is_mouse_button = QuickChat:GetButtonByAction("waypoints_clear_own","")
@@ -3407,6 +3454,132 @@ Hooks:Add("MenuManagerPopulateCustomMenus","QuickChat_MenuManagerPopulateCustomM
 		})
 	end
 	
+	
+	-- populate settings
+	
+	local settings_items = {
+		{
+			type = "toggle",
+			id = "menu_debug_logs_enabled",
+			title = "qc_menu_debug_logs_enabled_title",
+			desc = "qc_menu_debug_logs_enabled_desc",
+			value = "debug_draw",
+			skip_callback = false,
+			value_type = "boolean"
+		},
+		{
+			type = "toggle",
+			id = "menu_compatibility_gcw_enabled",
+			title = "qc_menu_compatibility_gcw_enabled_title",
+			desc = "qc_menu_compatibility_gcw_enabled_desc",
+			value = "compatibility_gcw_enabled",
+			skip_callback = false,
+			value_type = "boolean"
+		},
+		{
+			type = "toggle",
+			id = "menu_waypoints_alert_on_registration",
+			title = "qc_menu_waypoints_alert_on_registration_title",
+			desc = "qc_menu_waypoints_alert_on_registration_desc",
+			value = "waypoints_alert_on_registration",
+			skip_callback = false,
+			value_type = "boolean"
+		},
+		--[[
+		{
+			type = "toggle",
+			id = "menu_waypoints_max_count",
+			title = "waypoints_max_count_title",
+			desc = "waypoints_max_count_desc",
+			value = "waypoints_max_count",
+			value_type = "number"
+		},
+		--]]
+		{
+			type = "slider",
+			id = "menu_waypoints_aim_dot_threshold",
+			title = "qc_menu_waypoints_aim_dot_threshold_title",
+			desc = "qc_menu_waypoints_aim_dot_threshold_desc",
+			value = "waypoints_aim_dot_threshold",
+			min = 0.9,
+			max = 1,
+			step = 0.001,
+			show_value = true,
+			skip_callback = false,
+			value_type = "number"
+		},
+		{
+			type = "multiple_choice",
+			id = "menu_waypoints_attenuate_alpha_mode",
+			title = "qc_menu_waypoints_attenuate_alpha_mode_title",
+			desc = "qc_menu_waypoints_attenuate_alpha_mode_desc",
+			items = {
+				"qc_menu_waypoints_attenuate_alpha_mode_option_hide_disabled",
+				"qc_menu_waypoints_attenuate_alpha_mode_option_hide_center",
+				"qc_menu_waypoints_attenuate_alpha_mode_option_hide_edges"
+			},
+			skip_callback = false,
+			value = "waypoints_attenuate_alpha_mode",
+			value_type = "number"
+		},
+		{
+			type = "slider",
+			id = "menu_waypoints_attentuate_dot_threshold",
+			title = "qc_menu_waypoints_attentuate_dot_threshold_title",
+			desc = "qc_menu_waypoints_attentuate_dot_threshold_desc",
+			value = "waypoints_attenuate_dot_threshold",
+			min = 0.9,
+			max = 1,
+			step = 0.001,
+			show_value = true,
+			skip_callback = false,
+			value_type = "number"
+		},
+		{
+			type = "slider",
+			id = "menu_waypoints_attenuate_alpha_min",
+			title = "qc_menu_waypoints_attenuate_alpha_min_title",
+			desc = "qc_menu_waypoints_attenuate_alpha_min_desc",
+			value = "waypoints_attenuate_alpha_min",
+			min = 0,
+			max = 1,
+			step = 0.1,
+			show_value = true,
+			skip_callback = false,
+			value_type = "number"
+		},
+	}
+	
+	local function validate(value,value_type)
+		if value_type == "boolean" then
+			return value == "on"
+		elseif value_type == "number" then
+			return tonumber(value)
+		end
+		return value
+	end
+	
+	for i,menu_data in ipairs(settings_items) do
+		local value_id = menu_data.value
+		if value_id and not menu_data.skip_callback then
+			local callback_id = "callback_" .. menu_data.id
+			local value_type = menu_data.value_type
+			MenuCallbackHandler[callback_id] = function(this, item)
+				local value = item:value()
+				QuickChat.settings[value_id] = validate(value,value_type)
+				QuickChat:SaveSettings()
+			end
+			--menu_data.value = QuickChat.settings[value_id]
+			menu_data.default_value = QuickChat.default_settings[value_id]
+			menu_data.callback = callback_id
+			-- menu_data.items = {}
+			-- menu_data.binding = ""
+			-- menu_data.button = ""
+			-- menu_data.connection_name = "" 
+		end
+		QuickChat.add_menu_option_from_data(i,menu_data,QuickChat.MENU_IDS.MENU_SETTINGS,QuickChat.settings,QuickChat.default_settings)
+	end
+	
 	for i=#final_items,1,-1 do
 		local menu_data = final_items[i]
 		QuickChat.add_menu_option_from_data(i,menu_data,menu_data.menu_id,QuickChat.settings,QuickChat.default_settings)
@@ -3414,14 +3587,37 @@ Hooks:Add("MenuManagerPopulateCustomMenus","QuickChat_MenuManagerPopulateCustomM
 end)
 
 Hooks:Add("MenuManagerBuildCustomMenus","QuickChat_MenuManagerBuildCustomMenus",function(menu_manager, nodes)
-	nodes.quickchat_menu_main = MenuHelper:BuildMenu(
-		"quickchat_menu_main",{
+	
+	local qc_main_menu = MenuHelper:BuildMenu(
+		QuickChat.MENU_IDS.MENU_MAIN,{
 			area_bg = "none",
 			back_callback = "callback_menu_quickchat_back",
 			focus_changed_callback = nil
 		}
 	)
-	MenuHelper:AddMenuItem(nodes.blt_options,"quickchat_menu_main","qc_menu_main_title","qc_menu_main_desc")
+	nodes[QuickChat.MENU_IDS.MENU_MAIN] = qc_main_menu
+	MenuHelper:AddMenuItem(nodes.blt_options,QuickChat.MENU_IDS.MENU_MAIN,"qc_menu_main_title","qc_menu_main_desc")
+	
+	-- todo integrate this into the menu building helper func
+	nodes[QuickChat.MENU_IDS.MENU_BINDS] = MenuHelper:BuildMenu(
+		QuickChat.MENU_IDS.MENU_BINDS,{
+			area_bg = "none",
+			back_callback = nil,
+			focus_changed_callback = nil
+		}
+	)
+	MenuHelper:AddMenuItem(qc_main_menu,QuickChat.MENU_IDS.MENU_BINDS,"qc_menu_binds_title","qc_menu_binds_desc")
+	
+	
+	nodes[QuickChat.MENU_IDS.MENU_SETTINGS] = MenuHelper:BuildMenu(
+		QuickChat.MENU_IDS.MENU_SETTINGS,{
+			area_bg = "none",
+			back_callback = nil,
+			focus_changed_callback = nil
+		}
+	)
+	MenuHelper:AddMenuItem(qc_main_menu,QuickChat.MENU_IDS.MENU_SETTINGS,"qc_menu_settings_title","qc_menu_settings_desc")
+
 	
 	for menu_id,menu_data in pairs(QuickChat._populated_menus) do 
 		nodes[menu_id] = MenuHelper:BuildMenu(
