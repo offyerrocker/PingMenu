@@ -112,7 +112,7 @@ QuickChat.default_settings = {
 	--compatibility_gcw_receive_enabled = true, -- deprecated/combined into compatibility_gcw_enabled
 	compatibility_gcw_enabled = true,
 	waypoints_alert_on_registration = true,
-	waypoints_max_count = 1,
+	--waypoints_max_count = 1, --deprecated
 	waypoints_aim_dot_threshold = 0.995,
 	waypoints_attenuate_alpha_mode = 1, -- 1: do not fadeout. 2: fadeout at screen center. 3: fadeout at screen edges.
 	waypoints_attenuate_dot_threshold = 0.96,
@@ -124,7 +124,7 @@ QuickChat.sort_settings = {
 	"debug_draw",
 	"compatibility_gcw_enabled",
 	"waypoints_alert_on_registration",
-	"waypoints_max_count",
+	--"waypoints_max_count",
 	"waypoints_aim_dot_threshold",
 	"waypoints_attenuate_alpha_mode",
 	"waypoints_attenuate_dot_threshold",
@@ -1252,7 +1252,7 @@ function QuickChat:Log(msg)
 end
 
 function QuickChat:GetMaxNumWaypoints()
-	return self.settings.waypoints_max_count
+	return 1 --self.settings.waypoints_max_count
 end
 
 function QuickChat:GetIconDataByIndex(icon_index)
