@@ -1,8 +1,5 @@
 --TODO
 
--- more visible new-waypoint pulse/effect
-
-
 	--SCHEMA
 		--validate buttons on startup; no duplicate actions in binds
 		
@@ -42,7 +39,6 @@
 			--remove all waypoints data AND all panel children
 			
 		--subtle light glow at waypoint area
-		--built-in cooldown on text chats (locally enforced only)
 		--feedback on waypoint placement fail
 		--auto icon for units
 			--by interaction id; only in neutral ping
@@ -1003,6 +999,10 @@ QuickChat._message_presets = {
 	"qc_ptm_enemy_mshield",					--62
 	"qc_ptm_enemy_winters"					--63
 }
+
+QuickChat._message_cooldowns = {} -- locally enforced chat rate limiter
+QuickChat.TEXT_MESSAGE_COOLDOWN_COUNT = 3 -- maximum of three messages
+QuickChat.TEXT_MESSAGE_COOLDOWN_INTERVAL = 2 -- each one has a cooldown of 2 seconds
 
 QuickChat._localized_sound_names = {} -- holds sound names for the menu's multiplechoice
 QuickChat._ping_sounds = { -- only played locally, controlled by local user settings
@@ -2623,36 +2623,38 @@ function QuickChat:GetPeerVersion(peer_id)
 end
 
 function QuickChat:SendPresetMessage(preset_text_index)
-	local preset_text = preset_text_index and self._message_presets[preset_text_index]
-	if preset_text then
-		if managers.chat then
-			local network_mgr = managers.network
-			if network_mgr then
-				local session = network_mgr:session()
-				if session then 
-					local local_peer = session:local_peer()
-					local username = network_mgr.account:username()
-					local text_localized = managers.localization:text(preset_text)
-					for _,peer in pairs(session:peers()) do 
-						local peer_version = peer._quickchat_version 
-						
-						--if the QC API changes in the future, outbound messages will be reformatted here
-						if peer_version == "1" or peer_version == self.API_VERSION then
-							--v1-v2
-							LuaNetworking:SendToPeer(peer:id(),self.SYNC_MESSAGE_PRESET,preset_text_index)
-						else
-							if peer:ip_verified() then
-								peer:send("send_chat_message", ChatManager.GAME, text_localized) --LuaNetworking.HiddenChannel
+	if self:CheckChatCooldown(true) then
+		local preset_text = preset_text_index and self._message_presets[preset_text_index]
+		if preset_text then
+			if managers.chat then
+				local network_mgr = managers.network
+				if network_mgr then
+					local session = network_mgr:session()
+					if session then 
+						local local_peer = session:local_peer()
+						local username = network_mgr.account:username()
+						local text_localized = managers.localization:text(preset_text)
+						for _,peer in pairs(session:peers()) do 
+							local peer_version = peer._quickchat_version 
+							
+							--if the QC API changes in the future, outbound messages will be reformatted here
+							if peer_version == "1" or peer_version == self.API_VERSION then
+								--v1-v2
+								LuaNetworking:SendToPeer(peer:id(),self.SYNC_MESSAGE_PRESET,preset_text_index)
+							else
+								if peer:ip_verified() then
+									peer:send("send_chat_message", ChatManager.GAME, text_localized) --LuaNetworking.HiddenChannel
+								end
 							end
 						end
+						managers.chat:receive_message_by_peer(ChatManager.GAME,local_peer,"<" .. text_localized .. ">")
 					end
-					managers.chat:receive_message_by_peer(ChatManager.GAME,local_peer,"<" .. text_localized .. ">")
 				end
 			end
+		else
+			self:Log("Error: SendPresetMessage(" .. tostring(preset_text_index) .. ") bad preset index!")
+			return
 		end
-	else
-		self:Log("Error: SendPresetMessage(" .. tostring(preset_text_index) .. ") bad preset index!")
-		return
 	end
 end
 
@@ -2679,7 +2681,41 @@ function QuickChat:ReceivePresetMessage(peer_id,preset_text_index)
 	end
 end
 
+function QuickChat:CheckChatCooldown(is_sending)
+	local cooldowns = self._message_cooldowns
+	
+	local t = Application:time()
+	if #cooldowns >= self.TEXT_MESSAGE_COOLDOWN_COUNT then
+		-- check cooldown timer (only need to check topmost entry since only one message is sent at a time)
+		if cooldowns[1] + self.TEXT_MESSAGE_COOLDOWN_INTERVAL > t then
+			-- rate limited
+			if managers.chat and is_sending then
+				managers.chat:_receive_message(ChatManager.GAME,managers.localization:text("qc_menu_main_title"),managers.localization:text("qc_error_chat_rate_limited",{COOLDOWN=math.ceil(self.TEXT_MESSAGE_COOLDOWN_INTERVAL+cooldowns[1] - t)}),Color(249/255,110/255,35))
+			end
+			return false
+		else
+			-- sufficient time has passed since last message; allow sending
+			if is_sending then
+				table.remove(cooldowns,1)
+			end
+		end
+	else
+		-- allow sending
+	end
+	
+	if is_sending then
+		table.insert(cooldowns,#cooldowns+1,t)
+	end
+	return true
+end
+
 function QuickChat:SendChatToAll(msg)
+	if self:CheckChatCooldown(true) then
+		return self:_SendChatToAll(msg)
+	end
+end
+
+function QuickChat:_SendChatToAll(msg)
 	if managers.chat then
 		local session = managers.network:session()
 		local peer_id = session:local_peer():id()

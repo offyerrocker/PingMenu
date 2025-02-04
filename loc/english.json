@@ -149,7 +149,7 @@
 	"qc_menu_waypoints_ping_sound_volume_desc" : "How loud to play the ping sound",
 	"qc_menu_waypoints_ping_sound_id_title" : "Ping Sound File",
 	"qc_menu_waypoints_ping_sound_id_desc" : "Choose which ping sound to play.",
-	
+	"qc_error_chat_rate_limited" : "Sending messages too fast! Please wait $COOLDOWN more seconds.",
 	"qc_menu_debug_logs_enabled_title" : "Debug logs",
 	"qc_menu_debug_logs_enabled_desc" : "Leave off for better performance.",
 	"qc_menu_compatibility_gcw_enabled_title" : "Compatibility: Goonmod's Custom Waypoints",
