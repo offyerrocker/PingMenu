@@ -1218,7 +1218,7 @@ function QuickChat.find_interactable(unit)
 			--not just any objects with an interaction extension- 
 			--must be active and currently interactable
 		
---				self:log("active=" .. tostring(unit:interaction()._active) .. ",disabled=".. tostring(unit:interaction()._disabled))
+--				self:Log("active=" .. tostring(unit:interaction()._active) .. ",disabled=".. tostring(unit:interaction()._disabled))
 			return unit
 		end
 	end
@@ -1842,7 +1842,7 @@ function QuickChat:AddWaypoint(params) --called whenever local player attempts t
 	local is_neutral_ping = params.is_neutral_ping
 	
 	local dot_aim_threshold = self:GetWaypointAimDotThreshold()
-	local aimed_index,aimed_peerid,aimed_wp_data = self:GetAimedWaypoint(true,dot_aim_threshold,peer_id,nil)
+	local aimed_index,aimed_peerid,aimed_wp_data = self:GetAimedWaypoint(true,dot_aim_threshold,"all",nil)
 	if aimed_index then
 		if aimed_peerid == peer_id then
 			self:RemoveWaypoint(aimed_index)
@@ -1853,8 +1853,13 @@ function QuickChat:AddWaypoint(params) --called whenever local player attempts t
 				return
 			end
 		else
-			self:SendAcknowledgeWaypoint(peer_id,aimed_index)
-			return
+			if is_neutral_ping then
+				-- if quick press,
+				-- then acknowledge the waypoint,
+				-- stop here and don't replace it with a new one
+				self:AcknowledgeWaypoint(aimed_peerid,aimed_index)
+				return
+			end
 		end
 	end
 	
@@ -2193,6 +2198,35 @@ function QuickChat:_AddWaypoint(peer_id,waypoint_data) --called for both local p
 			visible = false
 		})
 		
+		local acknowledgement_wheel_panel = waypoint_panel:panel({
+			name = "acknowledgement_wheel_panel",
+				valign = "grow",
+				halign = "grow"
+		})
+		acknowledgement_wheel_panel:set_center(waypoint_panel:center())
+		
+		local num_players_max = BigLobbyGlobals and BigLobbyGlobals:num_player_slots() or 4
+		for i=1,num_players_max,1 do
+			local distance = 16
+			local angle = 45 + 180 + (360 * i / num_players_max)
+			local dot_x = math.cos(angle) * distance
+			local dot_y = math.sin(angle) * distance
+			local c_x,c_y = acknowledgement_wheel_panel:center()
+			local texture,texture_rect = self:GetIconDataByIndex(167)
+			local dot = acknowledgement_wheel_panel:bitmap({
+				name = tostring(i),
+				texture = texture,
+				texture_rect = texture_rect,
+				w = 12,
+				h = 12,
+				valign = "grow",
+				halign = "grow",
+				color = tweak_data.chat_colors[i],
+				visible = false
+			})
+			dot:set_center(c_x + dot_x,c_y + dot_y)
+		end
+		
 		local texture,texture_rect = self:GetIconDataByIndex(icon_index)
 		local icon_visible = texture and true or false
 		local label_id = label_index and self._label_presets[label_index]
@@ -2374,27 +2408,63 @@ function QuickChat:DisposeWaypoints(peer_id)
 	end
 end
 
-function QuickChat:AcknowledgeWaypoint(peer_id,waypoint_id)
-	self:_AcknowledgeWaypoint(peer_id,waypoint_id)
-	self:SendAcknowledgeWaypoint(peer_id,waypoint_id)
-	--not yet implemented
+function QuickChat:AcknowledgeWaypoint(waypoint_owner,waypoint_id)
+	self:_AcknowledgeWaypoint(managers.network:session():local_peer():id(),waypoint_owner,waypoint_id)
+	self:SendAcknowledgeWaypoint(waypoint_owner,waypoint_id)
 end
 
-function QuickChat:_AcknowledgeWaypoint(peer_id,waypoint_id)
-	--not yet implemented
-	local waypoint_data = self._synced_waypoints[peer_id][waypoint_id]
+function QuickChat:_AcknowledgeWaypoint(peer_id,waypoint_owner,waypoint_id)
+	local peer_waypoints = waypoint_owner and self._synced_waypoints[waypoint_owner]
+	local waypoint_data = waypoint_id and peer_waypoints[waypoint_id]
 	if waypoint_data then
-		
+		local panel = waypoint_data.panel
+		if alive(panel) then
+			local acknowledgement_wheel_panel = panel:child("acknowledgement_wheel_panel")
+			local checkmark = acknowledgement_wheel_panel:child(tostring(peer_id))
+			if alive(checkmark) then
+				checkmark:set_visible(not checkmark:visible())
+				local c_x,c_y = checkmark:center()
+				local w,h = 12,12
+				checkmark:stop()
+				checkmark:animate(self._animate_grow,0.75,2,w,h,c_x,c_y)
+			else
+				--self:Log("No checkmark alive " .. tostring(peer_id))
+			end
+		else
+			--self:Log("Waypoint panel not alive")
+		end
+	else
+		self:Log(string.format("Attempted to acknowledge an invalid waypoint: sender %i | owner %i | waypoint %i",peer_id,waypoint_owner,waypoint_id))
 	end
 end
 
-function QuickChat:SendAcknowledgeWaypoint(peer_id,waypoint_id)
-	--not yet implemented
+function QuickChat._animate_grow(o,duration,speed,w,h,c_x,c_y)
+	over(duration,function(p)
+		local mul = 1.5-math.cos(p * 360 * speed) / 2
+		o:set_size(w*mul,h*mul)
+		o:set_center(c_x,c_y)
+	end)
+	o:set_size(w,h)
+	o:set_center(c_x,c_y)
+end
+
+function QuickChat:SendAcknowledgeWaypoint(waypoint_owner,waypoint_id)
+	local sync_string = string.format("%i;%i",waypoint_owner,waypoint_id)
+	LuaNetworking:SendToPeers(self.SYNC_MESSAGE_WAYPOINT_ACKNOWLEDGE,sync_string)
 end
 
 function QuickChat:ReceiveAcknowledgeWaypoint(peer_id,message_string)
-	--not yet implemented
-	self:_AcknowledgeWaypoint(peer_id,waypoint_id)
+	local data = string.split(message_string,";")
+	if data then
+		local to_int = self.to_int
+		local waypoint_owner = to_int(data[1])
+		local waypoint_id = to_int(data[2])
+		if waypoint_owner and waypoint_id then
+			self:_AcknowledgeWaypoint(peer_id,waypoint_owner,waypoint_id)
+		else
+			self:Log("Invalid data from",peer_id,":",message_string)
+		end
+	end
 end
 
 function QuickChat:ReceiveGCWAttach(peer_id,message_string)
@@ -2495,8 +2565,22 @@ function QuickChat:GetAimedWaypoint(force_recalculate,dot_threshold,filter_peeri
 			return best_dot,best_index
 		end
 	end
-	
-	if type(filter_peerids) == "table" then
+	if filter_peerids == "all" then
+		local best_dot = dot_threshold or -1
+		for peer_id,waypoints in pairs(self._synced_waypoints) do 
+			--best dot of this peer's waypoints
+			local tmp_best_dot,tmp_best_index = find_waypoint(waypoints)
+			
+			--compare against all best
+			if tmp_best_dot and tmp_best_dot > best_dot then
+				best_dot = tmp_best_dot
+				best_wp_index = tmp_best_index
+				best_wp_peerid = peer_id
+			end
+		end
+		
+		best_wp_data = best_wp_index and self._synced_waypoints[best_wp_peerid][best_wp_index]
+	elseif type(filter_peerids) == "table" then
 
 		--best dot of all peer waypoints
 		local best_dot = dot_threshold or -1
