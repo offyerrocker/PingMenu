@@ -1,8 +1,8 @@
 --TODO
 
--- ping existing vanilla waypoints
+-- more visible new-waypoint pulse/effect
 
--- km indicator instead of m when above 1000m 
+-- imperial vs metric measurement?
 
 -- custom sound effect
 
@@ -40,12 +40,11 @@
 		--modifier key to go through glass
 		--modifier key for timers
 		
+		-- ping existing vanilla waypoints
+
 
 		--button/keybind to remove all waypoints
 			--remove all waypoints data AND all panel children
-		
-		--honey badger mode- barrel through and send that goddamned waypoint no matter what
-			--especially useful for gcw compatibility
 			
 		--subtle light glow at waypoint area
 		--built-in cooldown on text chats (locally enforced only)
@@ -69,6 +68,8 @@
 			--edge case where you want to keep the body marked after death is out of scope
 				--in this case, players should simply re-mark the body after death
 				--or i guess i could make a setting for that
+			-- alternatively, waypoint can tell you something about the pinged unit? like whether it's alive or dead
+			
 	--ASSETS
 		
 		--autotranslate icon for pretranslated messages in chat
@@ -2858,7 +2859,13 @@ function QuickChat:UpdateWaypoints(t,dt)
 				
 				if is_valid then
 					local distance = mvec3_distance(camera_position,wp_position)
-					waypoint_data.desc:set_text(string.format("%0.1fm",distance / 100))
+					if distance > 1000 then
+						local km = math.floor(distance / 100000)
+						local m = (distance % 100000) / 1000
+						waypoint_data.desc:set_text(string.format("%i.%ikm",km,m))
+					else
+						waypoint_data.desc:set_text(string.format("%0.1fm",distance / 100))
+					end
 				end
 			end
 			
