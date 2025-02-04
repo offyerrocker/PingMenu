@@ -2,12 +2,7 @@
 
 -- ping existing vanilla waypoints
 
--- when neutral pinging an existing ping, remove it
--- when specific pinging an existing ping, replace it
-
 -- km indicator instead of m when above 1000m 
-
--- acknowledge: indicator for which teammates have quickchat/gcw
 
 -- custom sound effect
 
@@ -45,6 +40,7 @@
 		--modifier key to go through glass
 		--modifier key for timers
 		
+
 		--button/keybind to remove all waypoints
 			--remove all waypoints data AND all panel children
 		
@@ -78,6 +74,7 @@
 		--autotranslate icon for pretranslated messages in chat
 		--normal surface plane for area markers
 		--"acknowledged" prompt and icon popup
+			-- could also have indicator slots for each teammate who is known to have gcw/qc
 			--think "read receipt" 
 	--BUGS
 		--(PRIORITY) can't rebind midgame
@@ -1302,6 +1299,11 @@ function QuickChat:IsGCWCompatibilitySendEnabled()
 	return self.settings.compatibility_gcw_enabled
 end
 
+-- if true, converts pings on non-interactable units (which would not be applicable for GCW "Attach" type waypoints) into static gcw position waypoints; this only applies to what is sent to the gcw user, not to the local user
+function QuickChat:UseGCWUnitPingResolution()
+	return true
+end
+
 function QuickChat:IsDebugDrawEnabled()
 	return self.settings.debug_draw
 end
@@ -1903,9 +1905,23 @@ function QuickChat:AddWaypoint(params) --called whenever local player attempts t
 			end
 		end
 		
+		local is_gcw_interactable_unit = nil
+		
 		local waypoint_type
 		local _unit_id,unit_id
 		if alive(unit_result) then
+			
+			-- if gcw compat is enabled,
+			-- only send a unit ("Attach") type waypoint if the unit is "interactable"
+			-- since gcw only supports unit waypoints on interactable units
+			if self:IsGCWCompatibilitySendEnabled() and self:UseGCWUnitPingResolution() then
+				for _,unit in ipairs(managers.interaction._interactive_units) do 
+					if unit:id() == _unit_id then
+						is_gcw_interactable_unit = true
+						break
+					end
+				end
+			end
 			
 			for i,waypoint_data in ipairs(self._synced_waypoints[peer_id]) do 
 				if waypoint_data.unit == unit_result then
@@ -1936,7 +1952,8 @@ function QuickChat:AddWaypoint(params) --called whenever local player attempts t
 			end_t = end_t,
 			position = position,
 			unit_id = unit_id,
-			unit = unit_result
+			unit = unit_result,
+			is_gcw_interactable_unit = is_gcw_interactable_unit
 		}
 		
 		self:_SendWaypoint(waypoint_data)
@@ -1949,6 +1966,7 @@ end
 
 function QuickChat:_SendWaypoint(waypoint_data) --format data and send to peers
 	local sync_string
+	local is_gcw_interactable_unit = waypoint_data.is_gcw_interactable_unit
 	local to_int = self.to_int
 	local waypoint_type = to_int(waypoint_data.waypoint_type)
 	local label_index = to_int(waypoint_data.label_index)
@@ -2000,12 +2018,14 @@ function QuickChat:_SendWaypoint(waypoint_data) --format data and send to peers
 				LuaNetworking:SendToPeer(peer:id(),self.SYNC_MESSAGE_WAYPOINT_ADD,sync_string)
 			elseif peer._quickchat_version == self.SYNC_TDLQGCW_VERSION and self:IsGCWCompatibilitySendEnabled() then
 				if not tdlq_gcw_msg_id then
-					if waypoint_type == self.WAYPOINT_TYPES.UNIT then
-						tdlq_gcw_msg_id = self.SYNC_TDLQGCW_WAYPOINT_UNIT
-						tdlq_gcw_msg_body = unit_id
-					elseif waypoint_type == self.WAYPOINT_TYPES.POSITION then
+					if waypoint_type == self.WAYPOINT_TYPES.POSITION or (self:UseGCWUnitPingResolution() and not is_gcw_interactable_unit) then
+						-- if unit is not applicable to be a gcw unit ("Attach") waypoint, 
+						-- convert it to a static position waypoint instead
 						tdlq_gcw_msg_id = self.SYNC_TDLQGCW_WAYPOINT_PLACE
 						tdlq_gcw_msg_body = string.format("%.1f,%.1f,%.1f",x,y,z)
+					elseif waypoint_type == self.WAYPOINT_TYPES.UNIT then
+						tdlq_gcw_msg_id = self.SYNC_TDLQGCW_WAYPOINT_UNIT
+						tdlq_gcw_msg_body = unit_id
 					end
 					if tdlq_gcw_msg_id and tdlq_gcw_msg_body then
 						LuaNetworking:SendToPeer(peer:id(),tdlq_gcw_msg_id,tdlq_gcw_msg_body)
