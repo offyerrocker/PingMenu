@@ -2011,7 +2011,7 @@ function QuickChat:_SendWaypoint(waypoint_data) --format data and send to peers
 	
 	local tdlq_gcw_msg_id,tdlq_gcw_msg_body
 	if sync_string then
---		self:Log(sync_string) --!
+--		self:Log(sync_string)
 
 		local API_VERSION = self.API_VERSION
 		for _,peer in pairs(managers.network:session():peers()) do 
@@ -2733,6 +2733,14 @@ function QuickChat:RemoveUpdater(id)
 end
 
 function QuickChat:Update(source,t,dt)
+--	if source == "GameSetupUpdate" then
+--		Console:SetTracker(string.format("%s %0.2f %0.2f",source,Application:time(),t),1)
+--	elseif source == "GameSetupPausedUpdate" then
+--		Console:SetTracker(string.format("%s %0.2f %0.2f",source,Application:time(),t),2)
+--	elseif source == "MenuUpdate" then
+--		Console:SetTracker(string.format("%s %0.2f %0.2f",source,Application:time(),t),3)
+--	end
+	
 	local game_is_paused = source == "GameSetupPausedUpdate"
 	for id,data in pairs(self._updaters) do 
 		if not game_is_paused or data.pause_enabled then
@@ -3420,7 +3428,7 @@ Hooks:Add("MenuManagerPopulateCustomMenus","QuickChat_MenuManagerPopulateCustomM
 				self:Save()
 				self._callback_bind_button = nil
 			end
-			QuickChat:AddDelayedCallback("quickchat_inputlistener",callback(QuickChat,QuickChat,"AddControllerInputListener"),0.1)
+			QuickChat:AddDelayedCallback("quickchat_inputlistener",callback(QuickChat,QuickChat,"AddControllerInputListener"),0.1,true)
 		end
 		
 		return menu_callback

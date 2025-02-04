@@ -26,6 +26,10 @@
 		{
 			"hook_id" : "lib/network/base/networkpeer",
 			"script_path" : "hooks/networkpeer.lua"
+		},
+		{
+			"hook_id" : "core/lib/managers/menu/reference_renderer/coremenunodegui",
+			"script_path" : "hooks/coremenunodegui.lua"
 		}
 	]
 }
