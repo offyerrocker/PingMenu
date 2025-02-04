@@ -143,6 +143,13 @@
 	"qc_menu_waypoint_title" : "Waypoint",
 	"qc_menu_waypoint_desc" : "A synced marker on the HUD that shows a position, person, or object of interest, set by a player.",
 	
+	"qc_menu_waypoints_ping_sound_enabled_title" : "Ping Sound Enabled",
+	"qc_menu_waypoints_ping_sound_enabled_desc" : "Play a sound whenever anyone places a new waypoint.",
+	"qc_menu_waypoints_ping_sound_volume_title" : "Ping Sound Volume",
+	"qc_menu_waypoints_ping_sound_volume_desc" : "How loud to play the ping sound",
+	"qc_menu_waypoints_ping_sound_id_title" : "Ping Sound File",
+	"qc_menu_waypoints_ping_sound_id_desc" : "Choose which ping sound to play.",
+	
 	"qc_menu_debug_logs_enabled_title" : "Debug logs",
 	"qc_menu_debug_logs_enabled_desc" : "Leave off for better performance.",
 	"qc_menu_compatibility_gcw_enabled_title" : "Compatibility: Goonmod's Custom Waypoints",

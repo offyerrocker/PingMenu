@@ -2,8 +2,6 @@
 
 -- more visible new-waypoint pulse/effect
 
--- custom sound effect
-
 
 	--SCHEMA
 		--validate buttons on startup; no duplicate actions in binds
@@ -49,7 +47,10 @@
 		--auto icon for units
 			--by interaction id; only in neutral ping
 		
-		--inverse alpha attenuation
+		-- adjust sound vector normalization
+			-- based on distance?
+			-- turning left/right makes the positional audio fading too extreme
+			-- should probably be mostly centered unless it's offscreen (check dot?)
 		
 		-- allow movement/other input during radial menu?
 		-- don't actually show radial menu until mouse moves?
@@ -115,6 +116,9 @@ QuickChat.default_settings = {
 	compatibility_gcw_enabled = true,
 	waypoints_alert_on_registration = true,
 	--waypoints_max_count = 1, --deprecated
+	waypoints_ping_sound_enabled = true,
+	waypoints_ping_sound_id = "standard", -- key to the list of registered quickchat sounds
+	waypoints_ping_sound_volume = 0.66, -- [0-1] volume of ping sound
 	waypoints_aim_dot_threshold = 0.995,
 	waypoints_attenuate_alpha_mode = 1, -- 1: do not fadeout. 2: fadeout at screen center. 3: fadeout at screen edges.
 	waypoints_attenuate_dot_threshold = 0.96,
@@ -127,6 +131,9 @@ QuickChat.sort_settings = {
 	"compatibility_gcw_enabled",
 	"waypoints_alert_on_registration",
 	--"waypoints_max_count",
+	"waypoints_ping_sound_enabled",
+	"waypoints_ping_sound_id",
+	"waypoints_ping_sound_volume",
 	"waypoints_aim_dot_threshold",
 	"waypoints_attenuate_alpha_mode",
 	"waypoints_attenuate_dot_threshold",
@@ -997,6 +1004,17 @@ QuickChat._message_presets = {
 	"qc_ptm_enemy_winters"					--63
 }
 
+QuickChat._localized_sound_names = {} -- holds sound names for the menu's multiplechoice
+QuickChat._ping_sounds = { -- only played locally, controlled by local user settings
+	standard = QuickChat._mod_path .. "assets/sounds/PingStandard.ogg",
+	retro = QuickChat._mod_path .. "assets/sounds/PingRetro.ogg",
+	scifi = QuickChat._mod_path .. "assets/sounds/PingScifi.ogg",
+	whip = QuickChat._mod_path .. "assets/sounds/PingWhip.ogg",
+	meme = QuickChat._mod_path .. "assets/sounds/PingMeme.ogg"
+}
+
+QuickChat.POSITIONAL_AUDIO_DISTANCE = 100 -- distance at which waypoint sfx will play 
+
 QuickChat._radial_menus = {} --generated radial menus
 QuickChat._radial_menu_params = {} --ungenerated radial menus; populated with user data
 
@@ -1176,7 +1194,9 @@ end
 
 local mvec3_distance = mvector3.distance
 local mvec3_dot = mvector3.dot
+local mvec3_add = mvector3.add
 local mvec3_sub = mvector3.subtract
+local mvec3_mul = mvector3.multiply
 local mvec3_set = mvector3.set
 local mvec3_dot = mvector3.dot
 local mvec3_normalize = mvector3.normalize
@@ -1285,6 +1305,16 @@ end
 
 function QuickChat:GetWaypointAttenuateAlphaMode()
 	return self.settings.waypoints_attenuate_alpha_mode
+end
+
+function QuickChat:GetWaypointSfxId()
+	return self.settings.waypoints_ping_sound_id
+end
+function QuickChat:GetWaypointSfxVolume()
+	return self.settings.waypoints_ping_sound_volume
+end
+function QuickChat:IsWaypointSfxEnabled()
+	return self.settings.waypoints_ping_sound_enabled
 end
 
 function QuickChat:IsWaypointRegistrationAlertEnabled()
@@ -2125,6 +2155,16 @@ function QuickChat:ReceiveRemoveWaypoint(peer_id,message_string) --synced remova
 end
 
 function QuickChat:_AddWaypoint(peer_id,waypoint_data) --called for both local player and for peers
+	local sound_source
+	if self:IsWaypointSfxEnabled() then
+		local snd_id = self:GetWaypointSfxId()
+		local snd_path = snd_id and self._ping_sounds[snd_id]
+		if snd_path then
+			sound_source = XAudio.UnitSource:new(XAudio.PLAYER,XAudio.Buffer:new(snd_path))
+			sound_source:set_volume(self:GetWaypointSfxVolume())
+		end
+	end
+	
 	local label_index = waypoint_data.label_index
 	local icon_index = waypoint_data.icon_index
 	local end_t = waypoint_data.end_t
@@ -2267,6 +2307,7 @@ function QuickChat:_AddWaypoint(peer_id,waypoint_data) --called for both local p
 			unit = unit,
 			unit_object = object,
 			unit_id = waypoint_data.unit_id,
+			sound_source = sound_source,
 			position = waypoint_data.position
 		}
 		table.insert(peer_waypoints,#peer_waypoints + 1,new_waypoint)
@@ -2605,7 +2646,7 @@ function QuickChat:SendPresetMessage(preset_text_index)
 							end
 						end
 					end
-					managers.chat:receive_message_by_peer(ChatManager.GAME,local_peer,text_localized)
+					managers.chat:receive_message_by_peer(ChatManager.GAME,local_peer,"<" .. text_localized .. ">")
 				end
 			end
 		end
@@ -2630,7 +2671,7 @@ function QuickChat:ReceivePresetMessage(peer_id,preset_text_index)
 						local text_localized = managers.localization:text(preset_text)
 						--local quickchat_version = peer._quickchat_version
 						--if the QC API changes in the future, inbound messages will be reformatted here
-						managers.chat:_receive_message(ChatManager.GAME,username,text_localized,peer_color)
+						managers.chat:_receive_message(ChatManager.GAME,username,"<" .. text_localized .. ">",peer_color)
 					end
 				end
 			end
@@ -2796,7 +2837,13 @@ function QuickChat:UpdateGame(t,dt)
 	self:UpdateWaypoints(t,dt)
 end
 
-local tmp_cam_fwd = Vector3()
+-- update positional audio;
+-- audio can't be at the actual waymark/unit position because if it's too far it won't be audible
+-- so the position needs to be updated along a normalized vector, at a fixed distance from the listener (camera)
+
+local tmp_cam_fwd = Vector3() -- used for UpdateWaypoints()
+local tmp_snd_pos = Vector3() -- used for UpdateWaypoints() ( for positional audio )
+-- includes setting sound positions
 function QuickChat:UpdateWaypoints(t,dt)	
 	local game_t = TimerManager:game():time()
 	local viewport_cam = managers.viewport:get_current_camera()
@@ -2830,7 +2877,6 @@ function QuickChat:UpdateWaypoints(t,dt)
 	local waypoint_attenuate_dot_threshold = self:GetWaypointAttenuateDotThreshold()
 	
 	local waypoint_reverse_dot = waypoint_attenuate_alpha_mode == 3
-	
 	
 --	local player = managers.player:local_player()
 	for peer_id,peer_data in pairs(self._synced_waypoints) do 
@@ -2883,6 +2929,25 @@ function QuickChat:UpdateWaypoints(t,dt)
 				
 				local direction = wp_position - camera_position
 				mvec3_normalize(direction)
+				
+				if waypoint_data.sound_source then
+					if not waypoint_data.sound_source:is_closed() then
+						if waypoint_data.sound_source:is_active() then
+							mvec3_set(tmp_snd_pos,direction)
+							mvec3_mul(tmp_snd_pos,self.POSITIONAL_AUDIO_DISTANCE)
+							mvec3_add(tmp_snd_pos,camera_position)
+							waypoint_data.sound_source:set_position(tmp_snd_pos)
+							--Draw:brush(Color.red:with_alpha(0.25)):sphere(tmp_snd_pos,25) -- visualize sound position
+						else
+							-- don't do this; the sound source is not technically considered "active" in the first frame before it updates
+							-- waypoint_data.sound_source = nil
+						end
+					else
+						waypoint_data.sound_source = nil
+					end
+				end
+				
+				
 				local dot = mvec3_dot(tmp_cam_fwd,direction)
 				
 				--[[
@@ -3082,6 +3147,7 @@ function QuickChat.add_menu_option_from_data(priority,menu_data,parent_menu_id,s
 	local title_id = menu_data.title
 	local desc_id = menu_data.description or menu_data.desc
 	local value_id = menu_data.value or ""
+	local value = menu_data.value_raw or value_id and settings[value_id]
 	local default_value = menu_data.default_value
 	local callback_id = menu_data.callback
 	local localized = menu_data.localized
@@ -3113,7 +3179,7 @@ function QuickChat.add_menu_option_from_data(priority,menu_data,parent_menu_id,s
 				title = title_id,
 				desc = desc_id,
 				callback = callback_id,
-				value = settings[value_id],
+				value = value,
 				default_value = menu_data.default_value or default_settings[value_id],
 				disabled = disabled,
 				localized = localized,
@@ -3125,7 +3191,7 @@ function QuickChat.add_menu_option_from_data(priority,menu_data,parent_menu_id,s
 				id = item_id,
 				title = title_id,
 				desc = desc_id,
-				value = settings[value_id],
+				value = value,
 				default_value = menu_data.default_value or default_settings[value_id],
 				min = menu_data.min,
 				max = menu_data.max,
@@ -3164,7 +3230,7 @@ function QuickChat.add_menu_option_from_data(priority,menu_data,parent_menu_id,s
 				desc = desc_id,
 				callback = callback_id,
 				items = menu_data.items,
-				value = settings[value_id],
+				value = value,
 				default_value = menu_data.default_value or default_settings[value_id],
 				disabled = disabled,
 				localized = localized,
@@ -3510,7 +3576,96 @@ Hooks:Add("MenuManagerPopulateCustomMenus","QuickChat_MenuManagerPopulateCustomM
 	
 	-- populate settings
 	
+	local function validate(value,value_type)
+		if value_type == "boolean" then
+			return value == "on"
+		elseif value_type == "number" then
+			return tonumber(value)
+		end
+		return value
+	end
+	
+	
+	local selected_sound_index = 1
+	local selected_sound_id = QuickChat.settings.waypoints_ping_sound_id
+	local sound_items = {} -- index:loc_id
+	local sound_ids = {} -- index:id 
+	local sound_locs = {} -- loc_id:str
+	for id,path in pairs(QuickChat._ping_sounds) do 
+		local i = #sound_items+1
+		local loc_str = "qc_menu_snd_" .. id
+		table.insert(sound_items,i,loc_str)
+		table.insert(sound_ids,i,id)
+		sound_locs[loc_str] = id
+		if id == selected_sound_id then
+			selected_sound_index = i
+		end
+	end
+	--QuickChat._localized_sound_names = sound_locs
+	managers.localization:add_localized_strings(sound_locs)
+	
+	local selected_sound_callback_id = "callback_menu_waypoints_ping_sound_id"
+	MenuCallbackHandler[selected_sound_callback_id] = function(this,item)
+		local selected_index = validate(item:value(),"number")
+		local id = sound_ids[selected_index]
+		if id then
+			QuickChat.settings.waypoints_ping_sound_id = id
+			-- preview sound
+			local path = QuickChat._ping_sounds[id]
+			if path then
+				local src
+				if managers.player:local_player() then
+					src = XAudio.UnitSource:new(XAudio.PLAYER,XAudio.Buffer:new(path))
+				else
+					src = XAudio.Source:new(XAudio.Buffer:new(path))
+				end
+				src._auto_pause = false
+				src:set_volume(QuickChat:GetWaypointSfxVolume())
+			end
+		end
+	end
+	
 	local settings_items = {
+		{
+			type = "toggle",
+			id = "menu_waypoints_ping_sound_enabled",
+			title = "qc_menu_waypoints_ping_sound_enabled_title",
+			desc = "qc_menu_waypoints_ping_sound_enabled_desc",
+			value = "waypoints_ping_sound_enabled",
+			skip_callback = false,
+			value_type = "boolean"
+		},
+		{
+			type = "slider",
+			id = "menu_waypoints_ping_sound_volume",
+			title = "qc_menu_waypoints_ping_sound_volume_title",
+			desc = "qc_menu_waypoints_ping_sound_volume_desc",
+			value = "waypoints_ping_sound_volume",
+			min = 0,
+			max = 1,
+			step = 0.1,
+			show_value = true,
+			skip_callback = false,
+			value_type = "number"
+		},
+		{
+			type = "multiple_choice",
+			id = "menu_waypoints_ping_sound_id",
+			title = "qc_menu_waypoints_ping_sound_id_title",
+			desc = "qc_menu_waypoints_ping_sound_id_desc",
+			items = table.deep_map_copy(sound_items),
+			callback = selected_sound_callback_id,
+			skip_callback = true,
+			value_raw = selected_sound_index,
+			value_type = "number"
+		},
+		{
+			type = "divider",
+			id = "menu_waypoints_snd_divider",
+			size = 16,
+			skip_callback = true
+		},
+		
 		{
 			type = "toggle",
 			id = "menu_debug_logs_enabled",
@@ -3600,17 +3755,8 @@ Hooks:Add("MenuManagerPopulateCustomMenus","QuickChat_MenuManagerPopulateCustomM
 			show_value = true,
 			skip_callback = false,
 			value_type = "number"
-		},
+		}
 	}
-	
-	local function validate(value,value_type)
-		if value_type == "boolean" then
-			return value == "on"
-		elseif value_type == "number" then
-			return tonumber(value)
-		end
-		return value
-	end
 	
 	for i,menu_data in ipairs(settings_items) do
 		local value_id = menu_data.value
@@ -3710,6 +3856,9 @@ end)
 Hooks:Add("LocalizationManagerPostInit","QuickChat_LocalizationManagerPostInit",function(loc)
 	if not BeardLib then 
 		loc:load_localization_file(QuickChat._mod_path .. "loc/english.json")
+	end
+	if QuickChat._localized_sound_names then
+		loc:add_localized_strings(QuickChat._localized_sound_names)
 	end
 end)
 
