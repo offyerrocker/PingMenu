@@ -112,6 +112,8 @@ QuickChat.default_settings = {
 	compatibility_gcw_enabled = true,
 	waypoints_alert_on_registration = true,
 	--waypoints_max_count = 1, --deprecated
+	waypoints_acknowledge_sound_enabled = true,
+	waypoints_acknowledge_sound_volume = 0.66, -- [0-1] volume of acknowledged sound
 	waypoints_ping_sound_enabled = true,
 	waypoints_ping_sound_id = "standard", -- key to the list of registered quickchat sounds
 	waypoints_ping_sound_volume = 0.66, -- [0-1] volume of ping sound
@@ -1012,6 +1014,7 @@ QuickChat._ping_sounds = { -- only played locally, controlled by local user sett
 	whip = QuickChat._mod_path .. "assets/sounds/PingWhip.ogg",
 	meme = QuickChat._mod_path .. "assets/sounds/PingMeme.ogg"
 }
+QuickChat._ACKNOWLEDGED_SFX_PATH = QuickChat._mod_path .. "assets/sounds/PingAcknowledged.ogg"
 
 QuickChat.POSITIONAL_AUDIO_DISTANCE = 100 -- distance at which waypoint sfx will play 
 
@@ -1315,6 +1318,13 @@ function QuickChat:GetWaypointSfxVolume()
 end
 function QuickChat:IsWaypointSfxEnabled()
 	return self.settings.waypoints_ping_sound_enabled
+end
+
+function QuickChat:GetAcknowledgedSfxVolume()
+	return self.settings.waypoints_acknowledge_sound_volume
+end
+function QuickChat:IsAcknowledgedSfxEnabled()
+	return self.settings.waypoints_acknowledge_sound_enabled
 end
 
 function QuickChat:IsWaypointRegistrationAlertEnabled()
@@ -2418,11 +2428,13 @@ function QuickChat:_AcknowledgeWaypoint(peer_id,waypoint_owner,waypoint_id)
 	local waypoint_data = waypoint_id and peer_waypoints[waypoint_id]
 	if waypoint_data then
 		local panel = waypoint_data.panel
+		local checkmark_visible
 		if alive(panel) then
 			local acknowledgement_wheel_panel = panel:child("acknowledgement_wheel_panel")
 			local checkmark = acknowledgement_wheel_panel:child(tostring(peer_id))
 			if alive(checkmark) then
-				checkmark:set_visible(not checkmark:visible())
+				checkmark_visible = not checkmark:visible()
+				checkmark:set_visible(checkmark_visible)
 				local c_x,c_y = checkmark:center()
 				local w,h = 12,12
 				checkmark:stop()
@@ -2430,9 +2442,21 @@ function QuickChat:_AcknowledgeWaypoint(peer_id,waypoint_owner,waypoint_id)
 			else
 				--self:Log("No checkmark alive " .. tostring(peer_id))
 			end
+			
 		else
 			--self:Log("Waypoint panel not alive")
 		end
+		if self:IsAcknowledgedSfxEnabled() and checkmark_visible then
+			local src
+			if managers.player:local_player() then
+				src = XAudio.UnitSource:new(XAudio.PLAYER,XAudio.Buffer:new(self._ACKNOWLEDGED_SFX_PATH))
+			else
+				-- play sound even if user is dead
+				src = XAudio.Source:new(XAudio.Buffer:new(self._ACKNOWLEDGED_SFX_PATH))
+			end
+			src:set_volume(self:GetAcknowledgedSfxVolume())
+		end
+		
 	else
 		self:Log(string.format("Attempted to acknowledge an invalid waypoint: sender %i | owner %i | waypoint %i",peer_id,waypoint_owner,waypoint_id))
 	end
@@ -2585,7 +2609,7 @@ function QuickChat:GetAimedWaypoint(force_recalculate,dot_threshold,filter_peeri
 		--best dot of all peer waypoints
 		local best_dot = dot_threshold or -1
 
-		for _,peer_id in pairs(filter_peerids) do 
+		for _,peer_id in pairs(filter_peerids) do
 			local waypoints = self._synced_waypoints[peer_id]
 			--best dot of this peer's waypoints
 			local tmp_best_dot,tmp_best_index = find_waypoint(waypoints)
@@ -3781,11 +3805,38 @@ Hooks:Add("MenuManagerPopulateCustomMenus","QuickChat_MenuManagerPopulateCustomM
 		},
 		{
 			type = "divider",
+			id = "menu_waypoints_ack_divider",
+			size = 8,
+			skip_callback = true
+		},
+		{
+			type = "toggle",
+			id = "menu_waypoints_acknowledged_sound_enabled",
+			title = "qc_menu_waypoints_acknowledged_sound_enabled_title",
+			desc = "qc_menu_waypoints_acknowledged_sound_enabled_desc",
+			value = "waypoints_acknowledge_sound_enabled",
+			skip_callback = false,
+			value_type = "boolean"
+		},
+		{
+			type = "slider",
+			id = "menu_waypoints_acknowledge_sound_volume",
+			title = "qc_menu_waypoints_acknowledge_sound_volume_title",
+			desc = "qc_menu_waypoints_acknowledge_sound_volume_desc",
+			value = "waypoints_acknowledge_sound_volume",
+			min = 0,
+			max = 1,
+			step = 0.1,
+			show_value = true,
+			skip_callback = false,
+			value_type = "number"
+		},
+		{
+			type = "divider",
 			id = "menu_waypoints_snd_divider",
 			size = 16,
 			skip_callback = true
 		},
-		
 		{
 			type = "toggle",
 			id = "menu_debug_logs_enabled",
