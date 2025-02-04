@@ -2866,7 +2866,7 @@ function QuickChat:UpdateWaypoints(t,dt)
 				
 				if is_valid then
 					local distance = mvec3_distance(camera_position,wp_position)
-					if distance > 1000 then
+					if distance >= 100000 then -- if 1 km or further away, show distance in km
 						local km = math.floor(distance / 100000)
 						local m = (distance % 100000) / 1000
 						waypoint_data.desc:set_text(string.format("%i.%ikm",km,m))
