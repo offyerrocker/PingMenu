@@ -1,11 +1,11 @@
 --TODO
-
+	
+	-- send gcw to all,
+	--  but exclude gcw users who have also sent the qc handshake
+	
 	--SCHEMA
 		--validate buttons on startup; no duplicate actions in binds
 		
-		--allow other movement actions during radial menu? (eg. steelsight)
-			--tactical leaning compat
-				--use head position instead of cam position?
 		
 		--todo use _supported_controller_type_map instead of manual mapping?
 			--may not be necessary if only the wrapper type is used
@@ -52,6 +52,9 @@
 		-- don't actually show radial menu until mouse moves?
 			-- assume neutral ping
 			-- would need to rewrite radialmenu to not be a dialog
+			--allow other movement actions during radial menu? (eg. steelsight)
+				--tactical leaning compat
+					--use head position instead of cam position?
 
 		--allow raycasting teammates (ai)
 		
@@ -74,9 +77,7 @@
 		
 		--autotranslate icon for pretranslated messages in chat
 		--normal surface plane for area markers
-		--"acknowledged" prompt and icon popup
-			-- could also have indicator slots for each teammate who is known to have gcw/qc
-			--think "read receipt" 
+		
 	--BUGS
 		--TimerManager:game():time() between client and host is desynced; use a different timer
 		--QuickChat detects controller mode if a controller is plugged in, even if keyboard is the "main" input
@@ -147,7 +148,7 @@ QuickChat.WAYPOINT_ANIMATE_FADEIN_DURATION = 5 --pulse for 3 seconds total
 QuickChat.WAYPOINT_ANIMATE_PULSE_INTERVAL = 1 --1 second per complete pulse anim
 
 QuickChat.SYNC_MESSAGE_PRESET = "QuickChat_message_preset"
-QuickChat.SYNC_MESSAGE_REGISTER = "QuickChat_Register"
+QuickChat.SYNC_MESSAGE_QC_HANDSHAKE = "QuickChat_Register"
 QuickChat.SYNC_MESSAGE_WAYPOINT_ADD = "QuickChat_SendWaypoint"
 QuickChat.SYNC_MESSAGE_WAYPOINT_ACKNOWLEDGE = "QuickChat_AcknowledgeWaypoint"
 QuickChat.SYNC_MESSAGE_WAYPOINT_REMOVE = "QuickChat_RemoveWaypoint"
@@ -2834,7 +2835,7 @@ function QuickChat:_SendChatToAll(msg)
 end
 
 function QuickChat:SendSyncPeerVersionToAll()
-	LuaNetworking:SendToPeers(self.SYNC_MESSAGE_REGISTER,self.API_VERSION)
+	LuaNetworking:SendToPeers(self.SYNC_MESSAGE_QC_HANDSHAKE,self.API_VERSION)
 end
 
 --Updaters
@@ -4038,7 +4039,7 @@ Hooks:Add("NetworkReceivedData","QuickChat_NetworkReceivedData",function(sender,
 	if managers.chat and managers.chat:is_peer_muted(peer) then
 		return
 	end
-	if message_id == QuickChat.SYNC_MESSAGE_REGISTER then
+	if message_id == QuickChat.SYNC_MESSAGE_QC_HANDSHAKE then
 		QuickChat:RegisterPeerById(sender,message_body)
 	elseif peer._quickchat_version == QuickChat.API_VERSION then
 		if message_id == QuickChat.SYNC_MESSAGE_PRESET then
