@@ -1,10 +1,15 @@
 --TODO
 
+-- ping existing vanilla waypoints
 
 -- when neutral pinging an existing ping, remove it
 -- when specific pinging an existing ping, replace it
 
+-- km indicator instead of m when above 1000m 
+
 -- acknowledge: indicator for which teammates have quickchat/gcw
+
+-- custom sound effect
 
 
 
@@ -1673,7 +1678,13 @@ function QuickChat:LoadMenuFromIni(ini_data) --converts and validates saved data
 			if body.ping_as_default then 
 --				new_menu_params.callback_on_cancelled = callback(self,self,"AddWaypoint")
 				new_menu_params.callback_on_cancelled = function()
-					local success,err = blt.pcall(callback(self,self,"AddWaypoint"))
+					local success,err = blt.pcall(
+						function()
+							self:AddWaypoint({
+								is_neutral_ping = true
+							})
+						end
+					)
 					if not success then
 						self:Log(err)
 					end
@@ -1785,6 +1796,7 @@ end
 
 function QuickChat:AddWaypoint(params) --called whenever local player attempts to create a new waypoint
 	
+	
 	local viewport_cam = managers.viewport:get_current_camera()
 	if not viewport_cam then 
 		--doesn't typically happen, usually for only a brief moment when all four players go into custody
@@ -1795,16 +1807,23 @@ function QuickChat:AddWaypoint(params) --called whenever local player attempts t
 	
 	local peer_id = managers.network:session():local_peer():id()
 	params = params or {}
+	local is_neutral_ping = params.is_neutral_ping
 	
 	local dot_aim_threshold = self:GetWaypointAimDotThreshold()
 	local aimed_index,aimed_peerid,aimed_wp_data = self:GetAimedWaypoint(true,dot_aim_threshold,peer_id,nil)
 	if aimed_index then
 		if aimed_peerid == peer_id then
 			self:RemoveWaypoint(aimed_index)
+			if is_neutral_ping then
+				-- if quick press,
+				-- then "dismiss" the waypoint, 
+				-- stop here and don't replace it with a new one
+				return
+			end
 		else
 			self:SendAcknowledgeWaypoint(peer_id,aimed_index)
+			return
 		end
-		return
 	end
 	
 	local cam_pos = viewport_cam:position()
@@ -1841,7 +1860,7 @@ function QuickChat:AddWaypoint(params) --called whenever local player attempts t
 				
 				if debug_draw_enabled then
 					local oobb = unit:oobb()
-					if oobb then
+					if oobb and BeardLib then
 						BeardLib:AddUpdater("qc_debug_draw",function(t,dt)
 							Draw:brush(Color.red:with_alpha(0.66)):sphere(raycast.position,self.WAYPOINT_SECONDARY_CAST_RADIUS)
 							debug_draw_duration = debug_draw_duration - dt
