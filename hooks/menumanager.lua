@@ -2993,10 +2993,28 @@ function QuickChat:UpdateWaypoints(t,dt)
 				end
 --				Console:SetTracker(hud_direction,2)
 
+				if waypoint_data.animate_in_duration then
+					--do pulse for new waypoints
+					local arrow_ghost = waypoint_data.arrow_ghost
+					if waypoint_data.animate_in_duration > 0 then
+						local start_t = waypoint_data.start_t
+						local pulse_t = 1 - (math.cos(((game_t - start_t) * 180/waypoint_animate_pulse_interval) % 180)+1) / 2
+						local size_scaled = arrow_ghost_size * (1 + pulse_t)
+						arrow_ghost:set_size(size_scaled,size_scaled)
+						arrow_ghost:set_alpha(1 - pulse_t)
+						arrow_ghost:set_center(waypoint_data.panel:w()/2,waypoint_data.panel:h()/2)
+						
+						waypoint_data.animate_in_duration = waypoint_data.animate_in_duration - dt
+					else
+						arrow_ghost:hide()
+						waypoint_data.animate_in_duration = nil
+					end
+				end
+				
 				if new_waypoint_state == "offscreen" then
 					arrow:set_rotation(hud_direction)
 				elseif new_waypoint_state == "onscreen" then
-					if waypoint_attenuate_alpha_mode == 1 then
+					if waypoint_data.animate_in_duration or waypoint_attenuate_alpha_mode == 1 then
 						waypoint_data.panel:set_alpha(1)
 					else
 						local dot_alpha
@@ -3016,24 +3034,6 @@ function QuickChat:UpdateWaypoints(t,dt)
 						end
 						--Console:SetTracker(string.format("%0.5f / %0.2f / a= %0.2f",dot,(dot - waypoint_attenuate_dot_threshold) or -1,dot_alpha),1)
 						waypoint_data.panel:set_alpha(dot_alpha)
-					end
-				end
-				
-				if waypoint_data.animate_in_duration then
-					--do pulse for new waypoints
-					local arrow_ghost = waypoint_data.arrow_ghost
-					if waypoint_data.animate_in_duration > 0 then
-						local start_t = waypoint_data.start_t
-						local pulse_t = 1 - (math.cos(((game_t - start_t) * 180/waypoint_animate_pulse_interval) % 180)+1) / 2
-						local size_scaled = arrow_ghost_size * (1 + pulse_t)
-						arrow_ghost:set_size(size_scaled,size_scaled)
-						arrow_ghost:set_alpha(1 - pulse_t)
-						arrow_ghost:set_center(waypoint_data.panel:w()/2,waypoint_data.panel:h()/2)
-						
-						waypoint_data.animate_in_duration = waypoint_data.animate_in_duration - dt
-					else
-						arrow_ghost:hide()
-						waypoint_data.animate_in_duration = nil
 					end
 				end
 				
