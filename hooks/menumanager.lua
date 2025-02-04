@@ -2,10 +2,7 @@
 
 -- more visible new-waypoint pulse/effect
 
--- imperial vs metric measurement?
-
 -- custom sound effect
-
 
 
 	--SCHEMA
@@ -54,6 +51,11 @@
 		
 		--inverse alpha attenuation
 		
+		-- allow movement/other input during radial menu?
+		-- don't actually show radial menu until mouse moves?
+			-- assume neutral ping
+			-- would need to rewrite radialmenu to not be a dialog
+
 		--allow raycasting teammates (ai)
 		
 		--display current gamepad mode in menu
@@ -61,6 +63,7 @@
 			--custom radial messages (use QKI?)
 			--preview radial in menu
 			--button combos?
+		--add localization chat shortcuts for things like skills or achievement names
 		--localize menu button names for controllers, per gamepad type
 		--allow selecting button by waiting at menu (for controllers) for x seconds
 			--(this allows controllers to bind or reserve any options they desire, without interfering with menu operation)
@@ -83,19 +86,17 @@
 		--character unit waypoints are in an unexpected place; move above head instead
 			--probably involves differently sized waypoint panels
 		--SWAT turrets have their target unit body detected incorrectly; waypoint is visually offset from the perceived turret core as a result
-		--known issue: discrepancies in max waypoint count between players may cause unexpected behavior
-			--waypoint limits are only enforced locally, so a client with a higher count may see other players' waypoints linger
-			--upon further reflection, this value should probably not even be a setting
 		--known issue: users of "goonmod's custom waypoints" (by tdlq) will not receive waypoints from users of this mod,
 			--until the local player receives a waypoint message back from them first (to register them)
 		--gcw waypoints are set to "place" instead of "unit"
 			--on quickchat's end, the marker attaches to the unit, but on gcw's end, the waypoint is a static positional waypoint
 			--when the bag is picked up, the marker is removed on quickchat's end
 			--but lingers for gcw
+		--known issue: discrepancies in max waypoint count between players may cause unexpected behavior
+			--waypoint limits are only enforced locally, so a client with a higher count may see other players' waypoints linger
+			--waypoint limit is now set at 1 globally, with no setting; consider this resolved
 		
 	--TESTS
-		--any: test placing/removing waypoints while dead
-		--mp: test max waypoints host/client mismatch behavior
 		
 QuickChat = QuickChat or {
 	_radial_menu_manager = nil, --for reference
