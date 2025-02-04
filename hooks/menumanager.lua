@@ -78,8 +78,6 @@
 			-- could also have indicator slots for each teammate who is known to have gcw/qc
 			--think "read receipt" 
 	--BUGS
-		--(PRIORITY) can't rebind midgame
-		--crash 3171 on refresh menu midgame
 		--TimerManager:game():time() between client and host is desynced; use a different timer
 		--QuickChat detects controller mode if a controller is plugged in, even if keyboard is the "main" input
 		--character unit waypoints are in an unexpected place; move above head instead
