@@ -31,7 +31,6 @@
 		
 		-- ping existing vanilla waypoints
 
-
 		--button/keybind to remove all waypoints
 			--remove all waypoints data AND all panel children
 			
@@ -68,11 +67,14 @@
 				--in this case, players should simply re-mark the body after death
 				--or i guess i could make a setting for that
 			-- alternatively, waypoint can tell you something about the pinged unit? like whether it's alive or dead
+		
+		-- lower opacity if no LOS to waypoint?
 			
 	--ASSETS
 		
 		--autotranslate icon for pretranslated messages in chat
 		--normal surface plane for area markers
+		-- use pd2 particle system?
 		
 	--BUGS
 		--TimerManager:game():time() between client and host is desynced; use a different timer
@@ -915,6 +917,10 @@ QuickChat._icon_presets = {
 			3 * 32,3 * 32,
 			32,32
 		}
+	},
+	{
+		source = 1, --infamy spade (the same one that gcw uses)
+		icon_id = "infamy_icon_1" -- 168
 	}
 }
 
@@ -2266,7 +2272,7 @@ function QuickChat:_AddWaypoint(peer_id,waypoint_data) --called for both local p
 			local dot_x = math.cos(angle) * distance
 			local dot_y = math.sin(angle) * distance
 			local c_x,c_y = acknowledgement_wheel_panel:center()
-			local texture,texture_rect = self:GetIconDataByIndex(167)
+			local texture,texture_rect = self:GetIconDataByIndex(167) --dot
 			local dot = acknowledgement_wheel_panel:bitmap({
 				name = tostring(i),
 				texture = texture,
@@ -2382,6 +2388,7 @@ function QuickChat:_AddWaypoint(peer_id,waypoint_data) --called for both local p
 		
 		local new_waypoint = {
 			panel = waypoint_panel,
+			is_gcw = waypoint_data.is_gcw,
 			icon = icon,
 			label = label,
 			desc = desc,
@@ -2547,8 +2554,9 @@ function QuickChat:ReceiveGCWAttach(peer_id,message_string)
 			local position = Vector3() --shouldn't matter much for a unit waypoint
 			self:_AddWaypoint(peer_id,{
 				waypoint_type = self.WAYPOINT_TYPES.UNIT,
+				is_gcw = true,
 				label_index = nil,
-				icon_index = nil,
+				icon_index = 168,
 				end_t = nil,
 				position = position,
 				unit_id = unit_id,
@@ -2566,8 +2574,9 @@ function QuickChat:ReceiveGCWPlace(peer_id,message_string)
 		if position then
 			self:_AddWaypoint(peer_id,{
 				waypoint_type = self.WAYPOINT_TYPES.POSITION,
+				is_gcw = true,
 				label_index = nil,
-				icon_index = nil,
+				icon_index = 168,
 				end_t = nil,
 				position = position,
 				unit_id = unit_id,
