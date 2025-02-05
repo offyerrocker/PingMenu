@@ -1282,6 +1282,30 @@ end
 
 function QuickChat.parse_l10n_csv(path) -- not yet implemented
 	local selected_language = "english"
+	local i = 0
+	local lang_code
+	local all_data = {}
+	for line in pairs(file:lines()) do 
+		i = i + 1
+		local this_row = string.split(line,"\t")
+		if i ~= 1 then
+			for column=1,#this_row,1 do 
+				all_data[column] = {}
+			end
+			lang_code = this_row[2]
+		else
+			for column=1,#this_row,1 do 
+				local c_data = all_data[column]
+				if c_data then
+					table.insert(c_data,#c_data+1,this_row[column])
+				end
+			end
+		end
+	end
+	
+	return all_data
+end
+
 function QuickChat:Log(msg)
 	if Console then
 		Console:Log(msg)
