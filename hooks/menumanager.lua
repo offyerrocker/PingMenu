@@ -1874,6 +1874,14 @@ function QuickChat:CallbackRadialSelection(item_data) --callback for selecting a
 		end
 	end
 	
+	if item_data.voice then
+		self:PlayCriminalSound(item_data.voice)
+	end
+	
+	if item_data.gesture then
+		self:PlayGesture(item_data.gesture)
+	end
+	
 	if preset_text_index then 
 		self:SendPresetMessage(preset_text_index)
 	elseif text then
@@ -2748,6 +2756,29 @@ function QuickChat:FindWaypoint(data,filter_peerids,filter_wp_func)
 	end
 	return wp_index,wp_peer_id,wp_data
 end
+
+--Voicelines/Gestures
+function QuickChat:PlayCriminalSound(id)		
+	if not id then return end
+	
+	local player = managers.player:local_player()
+	if alive(player) then
+		player:sound():say(id,true,true)
+	end
+end
+
+function QuickChat:PlayGesture(id)
+	if not id then return end
+	
+	local player = managers.player:local_player()
+	if alive(player) then
+		local mov_ext = player:movement()
+		if mov_ext and not mov_ext:in_clean_state() then 
+			mov_ext:current_state():_play_distance_interact_redirect(0, id)
+		end
+	end
+end
+
 
 --Networking
 
