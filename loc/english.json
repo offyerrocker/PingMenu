@@ -82,6 +82,7 @@
 	"qc_controller_steam" : "Steam Controller",
 	"qc_controller_gamepad" : "Generic Controller",
 	
+	"qc_alert_player_gcw" : "[$USERNAME] is using Goonmod's Custom Waypoints. Syncing may be limited.",
 	"qc_alert_player_registered_version_match" : "Connected to [$USERNAME]. Ready to sync waypoints.",
 	"qc_alert_player_registered_version_mismatch" : "Could not connect to [$USERNAME]. (Version mismatch: [theirs: $PEER_VERSION] [yours: $YOUR_VERSION])",
 	
