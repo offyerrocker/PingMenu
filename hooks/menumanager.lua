@@ -24,7 +24,6 @@
 		--fp redirect anims
 
 		--linger time for timer waypoints
-		--no attenuate during anim intro period
 		
 		--modifier key to force placement
 		--modifier key to go through glass
@@ -81,12 +80,6 @@
 		--character unit waypoints are in an unexpected place; move above head instead
 			--probably involves differently sized waypoint panels
 		--SWAT turrets have their target unit body detected incorrectly; waypoint is visually offset from the perceived turret core as a result
-		--known issue: users of "goonmod's custom waypoints" (by tdlq) will not receive waypoints from users of this mod,
-			--until the local player receives a waypoint message back from them first (to register them)
-		--gcw waypoints are set to "place" instead of "unit"
-			--on quickchat's end, the marker attaches to the unit, but on gcw's end, the waypoint is a static positional waypoint
-			--when the bag is picked up, the marker is removed on quickchat's end
-			--but lingers for gcw
 		--known issue: discrepancies in max waypoint count between players may cause unexpected behavior
 			--waypoint limits are only enforced locally, so a client with a higher count may see other players' waypoints linger
 			--waypoint limit is now set at 1 globally, with no setting; consider this resolved
@@ -1306,6 +1299,16 @@ function QuickChat.parse_l10n_csv(path) -- not yet implemented
 	return all_data
 end
 
+function QuickChat._animate_grow(o,duration,speed,w,h,c_x,c_y)
+	over(duration,function(p)
+		local mul = 1.5-math.cos(p * 360 * speed) / 2
+		o:set_size(w*mul,h*mul)
+		o:set_center(c_x,c_y)
+	end)
+	o:set_size(w,h)
+	o:set_center(c_x,c_y)
+end
+
 function QuickChat:Log(msg)
 	if Console then
 		Console:Log(msg)
@@ -2501,16 +2504,6 @@ function QuickChat:_AcknowledgeWaypoint(peer_id,waypoint_owner,waypoint_id)
 	else
 		self:Log(string.format("Attempted to acknowledge an invalid waypoint: sender %i | owner %i | waypoint %i",peer_id,waypoint_owner,waypoint_id))
 	end
-end
-
-function QuickChat._animate_grow(o,duration,speed,w,h,c_x,c_y)
-	over(duration,function(p)
-		local mul = 1.5-math.cos(p * 360 * speed) / 2
-		o:set_size(w*mul,h*mul)
-		o:set_center(c_x,c_y)
-	end)
-	o:set_size(w,h)
-	o:set_center(c_x,c_y)
 end
 
 function QuickChat:SendAcknowledgeWaypoint(waypoint_owner,waypoint_id)
