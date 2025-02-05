@@ -1,5 +1,4 @@
 --TODO
-	-- remove waypoint on timer expiration
 	-- csv parser
 	
 	--SCHEMA
@@ -1267,6 +1266,22 @@ function QuickChat.mvector3_equals(a,b)
 	return tostring(a) == tostring(b)
 end
 
+-- copied from sblt
+function QuickChat.serialize_vec3(vec)
+	return string.format("%08f,%08f,%08f", v.x, v.y, v.z)
+end
+
+-- copied from sblt
+function QuickChat.deserialize_vec3(s)
+	local x, y, z = string.match(s,"([-0-9.]+),([-0-9.]+),([-0-9.]+)")
+	x, y, z = tonumber(x), tonumber(y), tonumber(z)
+	if x and y and z then
+		return Vector3(x, y, z)
+	end
+end
+
+function QuickChat.parse_l10n_csv(path) -- not yet implemented
+	local selected_language = "english"
 function QuickChat:Log(msg)
 	if Console then
 		Console:Log(msg)
@@ -1954,19 +1969,7 @@ function QuickChat:AddWaypoint(params) --called whenever local player attempts t
 		local waypoint_type
 		local _unit_id,unit_id
 		if alive(unit_result) then
-			
-			-- if gcw compat is enabled,
-			-- only send a unit ("Attach") type waypoint if the unit is "interactable"
-			-- since gcw only supports unit waypoints on interactable units
-			if self:IsGCWCompatibilitySendEnabled() and self:UseGCWUnitPingResolution() then
-				for _,unit in ipairs(managers.interaction._interactive_units) do 
-					if unit:id() == _unit_id then
-						is_gcw_interactable_unit = true
-						break
-					end
-				end
-			end
-			
+
 			for i,waypoint_data in ipairs(self._synced_waypoints[peer_id]) do 
 				if waypoint_data.unit == unit_result then
 					--if the local player tags the same unit, 
@@ -1983,6 +1986,19 @@ function QuickChat:AddWaypoint(params) --called whenever local player attempts t
 			--attach waypoint to unit
 			waypoint_type = self.WAYPOINT_TYPES.UNIT
 			unit_id = _unit_id
+			
+						
+			-- if gcw compat is enabled,
+			-- only send a unit ("Attach") type waypoint if the unit is "interactable"
+			-- since gcw only supports unit waypoints on interactable units
+			if self:IsGCWCompatibilitySendEnabled() and self:UseGCWUnitPingResolution() then
+				for _,unit in ipairs(managers.interaction._interactive_units) do 
+					if unit:id() == _unit_id then
+						is_gcw_interactable_unit = true
+						break
+					end
+				end
+			end
 		else
 			--create waypoint at position
 			waypoint_type = self.WAYPOINT_TYPES.POSITION
@@ -2063,18 +2079,19 @@ function QuickChat:_SendWaypoint(waypoint_data) --format data and send to peers
 			elseif self:IsGCWCompatibilitySendEnabled() then -- and peer._gcw_version == self.SYNC_TDLQGCW_VERSION then
 				-- just send gcw waypoint to all peers just in case they have the mod but haven't sent a waypoint yet
 				if not tdlq_gcw_msg_id then
-					if waypoint_type == self.WAYPOINT_TYPES.POSITION or (self:UseGCWUnitPingResolution() and not is_gcw_interactable_unit) then
+					if waypoint_type == self.WAYPOINT_TYPES.UNIT and is_gcw_interactable_unit then
+						tdlq_gcw_msg_id = self.SYNC_TDLQGCW_WAYPOINT_UNIT
+						tdlq_gcw_msg_body = unit_id
+					elseif waypoint_type == self.WAYPOINT_TYPES.POSITION or self:UseGCWUnitPingResolution() then
 						-- if unit is not applicable to be a gcw unit ("Attach") waypoint, 
 						-- convert it to a static position waypoint instead
 						tdlq_gcw_msg_id = self.SYNC_TDLQGCW_WAYPOINT_PLACE
 						tdlq_gcw_msg_body = string.format("%.1f,%.1f,%.1f",x,y,z)
-					elseif waypoint_type == self.WAYPOINT_TYPES.UNIT then
-						tdlq_gcw_msg_id = self.SYNC_TDLQGCW_WAYPOINT_UNIT
-						tdlq_gcw_msg_body = unit_id
 					end
 					if tdlq_gcw_msg_id and tdlq_gcw_msg_body then
 						LuaNetworking:SendToPeer(peer:id(),tdlq_gcw_msg_id,tdlq_gcw_msg_body)
 					end
+					--Print("Sending waypoint. type", waypoint_type, "interactable",is_gcw_interactable_unit,"message",tdlq_gcw_msg_id,tdlq_gcw_msg_body)
 				end
 			else
 				--different version
@@ -2474,7 +2491,12 @@ end
 
 function QuickChat:SendAcknowledgeWaypoint(waypoint_owner,waypoint_id)
 	local sync_string = string.format("%i;%i",waypoint_owner,waypoint_id)
-	LuaNetworking:SendToPeers(self.SYNC_MESSAGE_WAYPOINT_ACKNOWLEDGE,sync_string)
+	for _,peer in pairs(managers.network:session():peers()) do 
+		if peer._quickchat_version == self.API_VERSION then
+			-- only send to qc peers
+			LuaNetworking:SendToPeer(peer:id(),self.SYNC_MESSAGE_WAYPOINT_ADD,sync_string)
+		end
+	end
 end
 
 function QuickChat:ReceiveAcknowledgeWaypoint(peer_id,message_string)
@@ -2520,7 +2542,7 @@ function QuickChat:ReceiveGCWAttach(peer_id,message_string)
 end
 
 function QuickChat:ReceiveGCWPlace(peer_id,message_string)
-	local position = string.ToVector3(message_string)
+	local position = self.deserialize_vec3(message_string)
 	local qc_version,gcw_version = self:GetPeerVersion(peer_id)
 	if not qc_version then
 		self:RegisterGCWPeerById(peer_id,self.SYNC_TDLQGCW_VERSION)
