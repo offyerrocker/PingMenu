@@ -1,8 +1,9 @@
 --TODO
 	-- csv parser
-	-- fix binding during online game still doing update checks even if menu is open
 	-- allow communication wheels during menu
 	-- when holding ping button, visualize a raycast to the hit unit
+	-- unify preview labels and sync labels
+	-- fix custom radial assets
 	
 	--SCHEMA
 		--validate buttons on startup; no duplicate actions in binds
@@ -23,9 +24,6 @@
 		
 		--proximity priority for spherecast
 	--FEATURES
-		--voicelines
-		--fp redirect anims
-
 		--linger time for timer waypoints
 		
 		--modifier key to force placement
@@ -1810,7 +1808,12 @@ function QuickChat:LoadMenuFromIni(ini_data) --converts and validates saved data
 		
 		local body = ini_data.RadialMenu
 		local id = body.id
-		local default_menu_data = {} --self._radial_menu_params.default
+		local default_menu_data = {
+			--texture_highlight="guis/textures/radial_menu/highlight",
+			--texture_darklight="guis/textures/radial_menu/darklight",
+			--texture_cursor="guis/textures/radial_menu/cursor"
+			
+		} --self._radial_menu_params.default
 		
 		if body then
 			
@@ -3151,11 +3154,11 @@ function QuickChat:UpdateGame(t,dt)
 		return
 	end
 	
-	if #managers.menu._open_menus > 0 then
-		-- block keybind execution if a menu is open
-	--and not (game_state_machine or GameStateFilters.player_slot[game_state_machine:current_state_name()]) then
-		return
-	end
+--	if #managers.menu._open_menus > 0 then
+--		-- block keybind execution if a menu is open
+--	--and not (game_state_machine or GameStateFilters.player_slot[game_state_machine:current_state_name()]) then
+--		return
+--	end
 	
 	local controller = self:GetController()
 	if not controller then
