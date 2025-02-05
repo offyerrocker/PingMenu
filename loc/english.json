@@ -113,6 +113,8 @@
 	"qc_menu_dialog_accept" : "Okay",
 	"qc_menu_bind_prompt_unbind" : "Unbind",
 	"qc_menu_dialog_cancel" : "Cancel",
+	"qc_menu_keybind_quick_ping_title" : "Quick Ping",
+	"qc_menu_keybind_quick_ping_desc" : "Instantly place a waypoint where you're looking.",
 	
 	"qc_menu_bind_prompt_unbound_title" : "Button unbound",
 	"qc_menu_bind_prompt_unbound_desc" : "Unbound [$KEYNAME] from [$ACTION].",

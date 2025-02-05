@@ -1,5 +1,8 @@
 --TODO
 	-- csv parser
+	-- fix binding during online game still doing update checks even if menu is open
+	-- allow communication wheels during menu
+	-- when holding ping button, visualize a raycast to the hit unit
 	
 	--SCHEMA
 		--validate buttons on startup; no duplicate actions in binds
@@ -185,7 +188,7 @@ QuickChat._synced_waypoints = {
 	{},{},{},{}
 }
 
-QuickChat._icon_presets = {
+QuickChat._icon_presets_by_index = {
 	{
 		source = 1,
 		icon_id = "pd2_lootdrop" --1
@@ -791,6 +794,7 @@ QuickChat._icon_presets = {
 		icon_id = "equipment_hydrogen_chloride" --151
 	},
 	{
+		name = "qc_ps_circle",
 		source = 2, --circle outline (ps button style)
 		texture = "guis/textures/pd2/quickchatmod/waypoint_icons_atlas", --152
 		texture_rect = {
@@ -799,6 +803,7 @@ QuickChat._icon_presets = {
 		}
 	},
 	{
+		name = "qc_ps_square",
 		source = 2, --square outline (ps button style)
 		texture = "guis/textures/pd2/quickchatmod/waypoint_icons_atlas", --153
 		texture_rect = {
@@ -807,6 +812,7 @@ QuickChat._icon_presets = {
 		}
 	},
 	{
+		name = "qc_ps_x",
 		source = 2, --x (ps button style)
 		texture = "guis/textures/pd2/quickchatmod/waypoint_icons_atlas", --154
 		texture_rect = {
@@ -815,6 +821,7 @@ QuickChat._icon_presets = {
 		}
 	},
 	{
+		name = "qc_ps_triangle",
 		source = 2, --triangle (ps button style)
 		texture = "guis/textures/pd2/quickchatmod/waypoint_icons_atlas", --155
 		texture_rect = {
@@ -823,6 +830,7 @@ QuickChat._icon_presets = {
 		}
 	},
 	{
+		name = "qc_numeral_1",
 		source = 2, --number "1"
 		texture = "guis/textures/pd2/quickchatmod/waypoint_icons_atlas", --156
 		texture_rect = {
@@ -831,6 +839,7 @@ QuickChat._icon_presets = {
 		}
 	},
 	{
+		name = "qc_numeral_2",
 		source = 2, --number "2"
 		texture = "guis/textures/pd2/quickchatmod/waypoint_icons_atlas", --157
 		texture_rect = {
@@ -839,6 +848,7 @@ QuickChat._icon_presets = {
 		}
 	},
 	{
+		name = "qc_numeral_3",
 		source = 2, --number "3"
 		texture = "guis/textures/pd2/quickchatmod/waypoint_icons_atlas", --158
 		texture_rect = {
@@ -847,6 +857,7 @@ QuickChat._icon_presets = {
 		}
 	},
 	{
+		name = "qc_numeral_4",
 		source = 2, --number "4"
 		texture = "guis/textures/pd2/quickchatmod/waypoint_icons_atlas", --159
 		texture_rect = {
@@ -855,6 +866,7 @@ QuickChat._icon_presets = {
 		}
 	},
 	{
+		name = "qc_letter_a",
 		source = 2, --capital letter "A"
 		texture = "guis/textures/pd2/quickchatmod/waypoint_icons_atlas", --160
 		texture_rect = {
@@ -863,6 +875,7 @@ QuickChat._icon_presets = {
 		}
 	},
 	{
+		name = "qc_letter_b",
 		source = 2, --capital letter "B"
 		texture = "guis/textures/pd2/quickchatmod/waypoint_icons_atlas", --161
 		texture_rect = {
@@ -871,6 +884,7 @@ QuickChat._icon_presets = {
 		}
 	},
 	{
+		name = "qc_letter_c",
 		source = 2, --capital letter "C"
 		texture = "guis/textures/pd2/quickchatmod/waypoint_icons_atlas", --162
 		texture_rect = {
@@ -879,6 +893,7 @@ QuickChat._icon_presets = {
 		}
 	},
 	{
+		name = "qc_letter_d",
 		source = 2, --capital letter "D"
 		texture = "guis/textures/pd2/quickchatmod/waypoint_icons_atlas", --163
 		texture_rect = {
@@ -887,6 +902,7 @@ QuickChat._icon_presets = {
 		}
 	},
 	{
+		name = "qc_letter_e",
 		source = 2, --capital letter "E"
 		texture = "guis/textures/pd2/quickchatmod/waypoint_icons_atlas", --164
 		texture_rect = {
@@ -895,6 +911,7 @@ QuickChat._icon_presets = {
 		}
 	},
 	{
+		name = "qc_letter_f",
 		source = 2, --capital letter "F"
 		texture = "guis/textures/pd2/quickchatmod/waypoint_icons_atlas", --165
 		texture_rect = {
@@ -903,7 +920,8 @@ QuickChat._icon_presets = {
 		}
 	},
 	{
-		source = 2, --"do not" symbol (circle bisected with diagonal cross)
+		name = "qc_do_not",
+		source = 2, --"do not" symbol (circle bisected with diagonal line)
 		texture = "guis/textures/pd2/quickchatmod/waypoint_icons_atlas", --166
 		texture_rect = {
 			2 * 32,3 * 32,
@@ -911,6 +929,7 @@ QuickChat._icon_presets = {
 		}
 	},
 	{
+		name = "qc_checkmark",
 		source = 2, --checkmark symbol
 		texture = "guis/textures/pd2/quickchatmod/waypoint_icons_atlas", --167
 		texture_rect = {
@@ -923,8 +942,12 @@ QuickChat._icon_presets = {
 		icon_id = "infamy_icon_1" -- 168
 	}
 }
+QuickChat._icon_presets_by_name = {}
+for index,data in ipairs(QuickChat._icon_presets_by_index) do
+	QuickChat._icon_presets_by_name[data.name or data.icon_id] = index
+end
 
-QuickChat._label_presets = {
+QuickChat._label_presets_by_index = {
 	"qc_wp_look",							--1
 	"qc_wp_go",								--2
 	"qc_wp_bag",							--3
@@ -932,6 +955,10 @@ QuickChat._label_presets = {
 	"qc_wp_deploy",							--5
 	"qc_wp_interact"						--6
 }
+QuickChat._label_presets_by_name = {} -- reverse lookup table
+for index,id in ipairs(QuickChat._label_presets_by_index) do 
+	QuickChat._label_presets_by_name[id] = index
+end
 
 QuickChat._message_presets = {
 	"qc_ptm_general_yes",					--1
@@ -1019,6 +1046,21 @@ QuickChat._radial_menus = {} --generated radial menus
 QuickChat._radial_menu_params = {} --ungenerated radial menus; populated with user data
 
 QuickChat._keybind_callbacks = {
+	quick_ping = {
+		callback_pressed = nil,
+		callback_released = function(t,dt,action_data)
+		--[[ -- todo give input_data to the callback func so that hold duration checking is possible
+			if t - input_data.hold_start_t > 0.5 then --if held for longer than 0.5 seconds then
+				-- do something?
+				QuickChat:AddWaypoint({is_neutral_ping=false})
+			else
+				QuickChat:AddWaypoint({is_neutral_ping=true})
+			end
+			--]]
+			QuickChat:AddWaypoint({is_neutral_ping=true})
+		end,
+		callback_held = nil
+	},
 	radial = {
 		callback_pressed = function(t,dt,action_data)
 			local radial_menu = QuickChat:GetRadialMenu(action_data.sub_type)
@@ -1072,6 +1114,7 @@ QuickChat._keybind_callbacks = {
 
 QuickChat._callback_bind_button = nil --dynamically set
 QuickChat._updaters = {}
+QuickChat._is_binding_listener_active = nil -- flag that blocks radial wheels from opening while binding window is active
 
 QuickChat.MENU_IDS = {
 	MENU_MAIN = "quickchat_menu_main",
@@ -1323,13 +1366,21 @@ function QuickChat:Log(msg)
 	end
 end
 
+function QuickChat:Print(...)
+	if Console then
+		Console:Print(...)
+	else
+		--log(...)
+	end
+end
+
 function QuickChat:GetMaxNumWaypoints()
 	return 1 --self.settings.waypoints_max_count
 end
 
 function QuickChat:GetIconDataByIndex(icon_index)
 	if icon_index then
-		local icon_data = self._icon_presets[icon_index]
+		local icon_data = self._icon_presets_by_index[icon_index]
 		if icon_data then
 			if icon_data.source == 1 then
 				return tweak_data.hud_icons:get_icon_data(icon_data.icon_id)
@@ -1338,6 +1389,11 @@ function QuickChat:GetIconDataByIndex(icon_index)
 			end
 		end
 	end
+end
+
+function QuickChat:GetIconDataByName(name)
+	local icon_index = name and self._icon_presets_by_name[name]
+	return self:GetIconDataByIndex(icon_index)
 end
 
 -- near aim threshold for detecting pinging an existing waypoint
@@ -1787,7 +1843,11 @@ function QuickChat:LoadMenuFromIni(ini_data) --converts and validates saved data
 			
 			for i,item_data in ipairs(ini_data) do 
 				local new_item = {}
-				if item_data.icon_index and self._icon_presets[item_data.icon_index] then
+				if item_data.icon and self._icon_presets_by_name[item_data.icon] then
+					local texture,texture_rect = self:GetIconDataByName(item_data.icon)
+					new_item.texture = texture
+					new_item.texture_rect = texture_rect
+				elseif item_data.icon_index and self._icon_presets_by_index[item_data.icon_index] then
 					local texture,texture_rect = self:GetIconDataByIndex(item_data.icon_index)
 					new_item.texture = texture
 					new_item.texture_rect = texture_rect
@@ -1936,7 +1996,6 @@ function QuickChat:AddWaypoint(params) --called whenever local player attempts t
 	local mode = 1
 	
 	local raycast = World:raycast("ray",cam_pos,to_pos,"slot_mask",self._waypoint_target_slotmask) or {}
-	
 	if raycast and raycast.position then
 		if debug_draw_enabled then
 			local brush = Draw:brush(Color.red:with_alpha(0.66),debug_draw_duration)
@@ -1949,9 +2008,12 @@ function QuickChat:AddWaypoint(params) --called whenever local player attempts t
 		if params.timer and params.timer > 0 then
 			end_t = TimerManager:game():time() + params.timer
 		end
-		local label_index = params.label_index or 0
-		local icon_index = params.icon_index or 0
-		
+		local label_index = 0
+		if params.label_index then
+			label_index = params.label_index or label_index
+		elseif params.label_id then
+			label_index = self._label_presets_by_name[params.label_id] or label_index
+		end
 		
 		local find_interactable = self.find_interactable
 		local find_character = self.find_character
@@ -2045,6 +2107,27 @@ function QuickChat:AddWaypoint(params) --called whenever local player attempts t
 			waypoint_type = self.WAYPOINT_TYPES.POSITION
 		end
 		
+		
+		local icon_index = 0
+		if params.icon then
+			icon_index = self._icon_presets_by_name[params.icon] or icon_index
+		elseif params.icon_index then
+			icon_index = params.icon_index or icon_index
+		elseif is_neutral_ping then
+			if unit_result then
+--				icon_index = 6
+			end
+		--[[
+			--todo determine fallback icon if is neutral ping and unit was pinged
+			if unit_type == "interaction" then
+				icon_index = 18 -- pd2_generic_interact
+			elseif unit_result then
+				icon_index = 6 -- pd2_generic_look (exclaimation point)
+			end
+			--]]
+		end
+		
+		
 		local waypoint_data = {
 			waypoint_type = waypoint_type,
 			icon_index = icon_index,
@@ -2054,6 +2137,7 @@ function QuickChat:AddWaypoint(params) --called whenever local player attempts t
 			position = position,
 			unit_id = unit_id,
 			unit = unit_result,
+			is_neutral_ping = is_neutral_ping,
 			is_gcw_interactable_unit = is_gcw_interactable_unit
 		}
 		
@@ -2297,7 +2381,7 @@ function QuickChat:_AddWaypoint(peer_id,waypoint_data) --called for both local p
 		
 		local texture,texture_rect = self:GetIconDataByIndex(icon_index)
 		local icon_visible = texture and true or false
-		local label_id = label_index and self._label_presets[label_index]
+		local label_id = label_index and self._label_presets_by_index[label_index]
 		local label_text = label_id and managers.localization:text(label_id)
 		
 		local icon_size = self.WAYPOINT_ICON_SIZE
@@ -2958,11 +3042,16 @@ end
 --Updaters
 
 function QuickChat:AddControllerInputListener() --only for rebinding
+	self._is_binding_listener_active = true
 	self:AddUpdater("quickchat_update_rebinding",callback(self,self,"UpdateRebindingListener"),true)
 --	self:Log("QuickChat: Adding listener for " .. tostring(self:GetController()) .. ", gamepad mode " .. tostring(self:IsGamepadModeEnabled()))
 end
 
 function QuickChat:RemoveControllerInputListener() --only for rebinding
+	self:AddDelayedCallback("quickchat_rebinding_delayed_unblock_input",function()
+		self._is_binding_listener_active = false
+	end,
+	0.5,true)
 	self:RemoveUpdater("quickchat_update_rebinding")
 --	self:Log("QuickChat: Rebinding listener removed.")
 end
@@ -3052,6 +3141,22 @@ function QuickChat:Update(source,t,dt)
 end
 
 function QuickChat:UpdateGame(t,dt)
+	if self._is_binding_listener_active then
+		-- block keybind execution if currently listening for rebind key input
+		return
+	end
+	local dialog = managers.system_menu._active_dialog 
+	if dialog and dialog.NAME ~= "RadialMenuDialog" then -- or managers.system_menu:is_active()
+		-- block keybind execution if a dialog (besides a radial menu) is open
+		return
+	end
+	
+	if #managers.menu._open_menus > 0 then
+		-- block keybind execution if a menu is open
+	--and not (game_state_machine or GameStateFilters.player_slot[game_state_machine:current_state_name()]) then
+		return
+	end
+	
 	local controller = self:GetController()
 	if not controller then
 		return
@@ -3389,7 +3494,18 @@ function QuickChat:LoadBindings(filename)
 	local file = io.open(save_path, "r")
 	if file then
 		for k, v in pairs(json.decode(file:read("*all"))) do
-			self._bindings[k] = v
+			local action_data = v.action_data
+			if action_data and action_data.action_type == "radial" and action_data.sub_type then
+				if self._radial_menu_params[action_data.sub_type] then
+					-- valid binding with (probably) valid radial id
+					self._bindings[k] = v
+				else
+					self:Print("Invalid binding",k,v.action_data,v.sub_type)
+				-- invalid binding; discard
+				end
+			else
+				self._bindings[k] = v
+			end
 		end
 		file:close()
 	end
@@ -3530,8 +3646,8 @@ end
 
 Hooks:Add("MenuManagerSetupCustomMenus","QuickChat_MenuManagerSetupCustomMenus",function(menu_manager, nodes)
 	QuickChat:UnpackGamepadBindings()
-	QuickChat:Load()
 	QuickChat:LoadCustomRadials()
+	QuickChat:Load()
 	
 	MenuHelper:NewMenu(QuickChat.MENU_IDS.MENU_MAIN)
 	
@@ -3806,6 +3922,28 @@ Hooks:Add("MenuManagerPopulateCustomMenus","QuickChat_MenuManagerPopulateCustomM
 		})
 	end
 	
+	
+	do
+		local current_binding_text
+		local current_button,current_is_mouse_button = QuickChat:GetButtonByAction("quick_ping","")
+		if current_button then
+			current_binding_text = managers.localization:text("qc_bind_status_title",{KEYNAME=get_button_display_name(current_button,current_is_mouse_button)})
+		else
+			current_binding_text = UNBOUND_TEXT
+		end
+		
+		add_binding_button({
+			id = "quick_ping",
+			header_title = managers.localization:text("qc_menu_keybind_quick_ping_title"),
+			header_desc = managers.localization:text("qc_menu_keybind_quick_ping_desc"),
+			button_title = current_binding_text,
+			button_desc = managers.localization:text("qc_bind_status_desc"),
+			callback = generate_menu_callback("quick_ping",""),
+			parent_menu_id = parent_menu_id
+		})
+	end
+	
+	
 	do
 		local current_binding_text
 		local current_button,current_is_mouse_button = QuickChat:GetButtonByAction("waypoints_clear_own","")
@@ -3825,7 +3963,7 @@ Hooks:Add("MenuManagerPopulateCustomMenus","QuickChat_MenuManagerPopulateCustomM
 			parent_menu_id = parent_menu_id
 		})
 	end
-	
+		
 	do
 		local current_binding_text
 		local current_button,current_is_mouse_button = QuickChat:GetButtonByAction("waypoints_clear_all","")

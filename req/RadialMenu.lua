@@ -1,4 +1,4 @@
---v2.0.0
+--v2.0.1
 
 --[[
 	TODO
@@ -82,7 +82,6 @@ Hooks:Add("BaseNetworkSessionOnLoadComplete","RadialMenu_OnLoaded",RadialMenuMan
 --====================================
 --this is a wrapper for the actual dialog object
 --mostly it's used to provide a layer of insulation with safety checks, in case the radial menu methods are called before the menu is ready to use
-
 function RadialMenuObject:init(radialmenumanager,params) --constructor
 	self._radial_menu_manager = radialmenumanager
 	
@@ -193,7 +192,7 @@ end
 --====================================
 -- RadialMenuDialog class
 --====================================
-
+RadialMenuDialog.NAME = "RadialMenuDialog"
 function RadialMenuDialog:init(manager,data,...)
 	RadialMenuDialog.super.init(self,manager,data,...)
 	
