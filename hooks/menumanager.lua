@@ -1,12 +1,8 @@
 --TODO
-	-- fix custom radial assets
-	-- csv parser
 	-- allow communication wheels during menu
-	-- pass generation userdata to items
-	-- test waypoints through cameras?
 	-- toggle for allowing unit tagging
 	-- allow peers to send a mute command
-	-- radial deadzone/size menu option
+	-- radial deadzone/size/alpha menu option
 	
 	-- todo don't keep all languages in memory;
 		-- read all the potential filenames and use those in the menu instead?
