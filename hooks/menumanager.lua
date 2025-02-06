@@ -1289,6 +1289,8 @@ QuickChat._allowed_binding_buttons = {}
 QuickChat._allowed_binding_mouse_buttons = {} --just to hold mouse buttons!
 --because this is the only case (that i know of) where multiple wrappers are naturally active at once
 
+QuickChat._DEBUG_DRAW_DURATION = 5
+
 --load dependencies/classes
 do --load RadialMenu
 	local f,e = blt.vm.loadfile(QuickChat._mod_path .. "req/RadialMenu.lua")
@@ -2270,16 +2272,18 @@ end
 
 --Waypoints
 
+local tmp_camfrom_vec3 = Vector3()
+local tmp_camto_vec3 = Vector3()
 function QuickChat:AddWaypoint(params) --called whenever local player attempts to create a new waypoint
 	
 	
 	local viewport_cam = managers.viewport:get_current_camera()
 	if not viewport_cam then 
 		--doesn't typically happen, usually for only a brief moment when all four players go into custody
-		return 
+		return
 	end
 	local debug_draw_enabled = self:IsDebugDrawEnabled()
-	local debug_draw_duration = 5
+	local debug_draw_duration = self._DEBUG_DRAW_DURATION
 	
 	local peer_id = managers.network:session():local_peer():id()
 	params = params or {}
@@ -2307,18 +2311,26 @@ function QuickChat:AddWaypoint(params) --called whenever local player attempts t
 		end
 	end
 	
-	local cam_pos = viewport_cam:position()
-	local cam_aim = viewport_cam:rotation():y()
+	mvec3_set(tmp_camfrom_vec3,viewport_cam:position())
+	mvec3_set(tmp_camto_vec3,viewport_cam:rotation():y())
 	
-	local to_pos = cam_pos + (cam_aim * self.WAYPOINT_RAYCAST_DISTANCE)
+	local ignore_units = {}
+	if game_state_machine and game_state_machine:current_state_name() == "ingame_access_camera" then
+		-- allow pinging through cameras
+		local state = game_state_machine:current_state()
+		if state._last_access_camera and state._last_access_camera:has_camera_unit() then
+			table.insert(ignore_units,1,state._last_access_camera:camera_unit())
+		end
+	end	
 	
-	local mode = 1
+	mvec3_mul(tmp_camto_vec3,self.WAYPOINT_RAYCAST_DISTANCE)
+	mvec3_add(tmp_camto_vec3,tmp_camfrom_vec3)
 	
-	local raycast = World:raycast("ray",cam_pos,to_pos,"slot_mask",self._waypoint_target_slotmask) or {}
+	local raycast = World:raycast("ray",tmp_camfrom_vec3,tmp_camto_vec3,"slot_mask",self._waypoint_target_slotmask,"ignore_unit",ignore_units) or {}
 	if raycast and raycast.position then
 		if debug_draw_enabled then
 			local brush = Draw:brush(Color.red:with_alpha(0.66),debug_draw_duration)
-			brush:line(cam_pos,raycast.position,10)
+			brush:line(tmp_camfrom_vec3,raycast.position,10)
 		end
 		local position = raycast.position
 		local unit_result
