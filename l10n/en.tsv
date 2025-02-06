@@ -53,6 +53,7 @@ qc_ptm_need_bodybags	I need Body Bags!
 qc_ptm_need_grenades	Place a Grenade Crate here!
 qc_ptm_need_convert	I need a Joker!
 qc_ptm_need_ties	I need this person cable-tied!
+qc_equipment_ties	Cable Ties
 qc_ptm_enemy_sniper	Sniper!
 qc_ptm_enemy_cloaker	Cloaker!
 qc_ptm_enemy_taser	Taser!
@@ -69,6 +70,8 @@ qc_wp_bag	Bag
 qc_wp_kill	Kill
 qc_wp_deploy	Deploy
 qc_wp_interact	Interact
+qc_wp_defend	Defend
+qc_wp_avoid	Avoid
 qc_hud_needs_something_template	I need...
 qc_alert_player_gcw	[$USERNAME] is using Goonmod's Custom Waypoints. Syncing may be limited.
 qc_alert_player_registered_version_match	Connected to [$USERNAME]. Ready to sync waypoints.

@@ -3484,6 +3484,13 @@ function QuickChat:UpdateGame(t,dt)
 --	--and not (game_state_machine or GameStateFilters.player_slot[game_state_machine:current_state_name()]) then
 --		return
 --	end
+
+	if managers.hud and managers.hud:chat_focus() then
+		return
+	elseif managers.menu_component and managers.menu_component:input_focut_game_chat_gui() then
+		return
+	end
+	
 	
 	local controller = self:GetController()
 	if not controller then
