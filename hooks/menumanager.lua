@@ -7,7 +7,11 @@
 	-- toggle for allowing unit tagging
 	-- allow peers to send a mute command
 	-- radial deadzone/size menu option
-	-- language selection
+	
+	-- todo don't keep all languages in memory;
+		-- read all the potential filenames and use those in the menu instead?
+		-- load language files on demand and overwrite previous loc
+	
 	--SCHEMA
 		--validate buttons on startup; no duplicate actions in binds
 		
@@ -101,10 +105,13 @@ QuickChat._mod_path = (QuickChatCore and QuickChatCore.GetPath and QuickChatCore
 QuickChat._save_path = SavePath .. "QuickChat/"
 QuickChat._save_layouts_path = QuickChat._save_path .. "layouts/"
 QuickChat._assets_path = QuickChat._mod_path .. "assets/"
+QuickChat._l10n_path = QuickChat._mod_path .. "l10n/"
 QuickChat._bindings_name = "bindings_$WRAPPER.json"
 QuickChat._settings_name = "settings.json"
+QuickChat._DEFAULT_LANGUAGE_ID = "en"
 QuickChat.default_settings = {
 	debug_draw = false,
+	user_language = QuickChat._DEFAULT_LANGUAGE_ID,
 	--compatibility_gcw_send_enabled = true, -- deprecated/combined into compatibility_gcw_enabled
 	--compatibility_gcw_receive_enabled = true, -- deprecated/combined into compatibility_gcw_enabled
 	compatibility_gcw_enabled = true,
@@ -126,6 +133,7 @@ QuickChat.default_settings = {
 QuickChat.settings = table.deep_map_copy(QuickChat.default_settings) --general user pref
 QuickChat.sort_settings = {
 	"debug_draw",
+	"user_language",
 	"compatibility_gcw_enabled",
 	"radial_deadzone",
 	"radial_size",
@@ -1051,6 +1059,9 @@ QuickChat._message_cooldowns = {} -- locally enforced chat rate limiter
 QuickChat.TEXT_MESSAGE_COOLDOWN_COUNT = 3 -- maximum of three messages
 QuickChat.TEXT_MESSAGE_COOLDOWN_INTERVAL = 2 -- each one has a cooldown of 2 seconds
 
+QuickChat._language_data = {} -- holds localized strings for each language
+QuickChat._is_loc_loaded = false
+
 QuickChat._localized_sound_names = {} -- holds sound names for the menu's multiplechoice
 QuickChat._ping_sounds = { -- only played locally, controlled by local user settings
 	standard = QuickChat._assets_path .. "sounds/PingStandard.ogg",
@@ -1179,6 +1190,7 @@ QuickChat._keybind_callbacks = {
 QuickChat._callback_bind_button = nil --dynamically set
 QuickChat._updaters = {}
 QuickChat._is_binding_listener_active = nil -- flag that blocks radial wheels from opening while binding window is active
+
 
 QuickChat.MENU_IDS = {
 	MENU_MAIN = "quickchat_menu_main",
@@ -1386,30 +1398,109 @@ function QuickChat.deserialize_vec3(s)
 	end
 end
 
+function QuickChat.GetFiles(path,...)
+	if FileIO then -- this is a beardlib util at BeardLib/Classes/Utils/FileIO
+		return FileIO:GetFiles(path,...)
+	end
+	
+	-- and this is the relevant function directly copied from there
+	if SystemFS and SystemFS.list then
+		return SystemFS:list(path)
+	else
+		return file.GetFiles(path)
+	end
+end
+
+function QuickChat:ChooseLanguage(lang_name)
+	if lang_name and self._language_data[lang_name] then
+		if self._is_loc_loaded then
+			managers.localization:add_localized_strings(self._language_data[lang_name])
+		else
+			Hooks:Add("LocalizationManagerPostInit","QuickChat_load_localization_file",function(loc)
+				QuickChat._is_loc_loaded = true
+				loc:add_localized_strings(self._language_data[lang_name])
+			end)
+		end
+	else
+		self:Print("No language by name:",lang_name)
+	end
+end
+
+function QuickChat:LoadLanguageFiles()
+	self:Log("Loading localization files...")
+	local l10n_path = self._l10n_path
+	for _,filename in pairs(self.GetFiles(l10n_path)) do 
+		self:Print("loc file:",l10n_path,filename)
+		local lang_rev = string.reverse(filename)
+		local a,b = string.find(lang_rev,"%.")
+		local ext = string.reverse(string.sub(lang_rev,1,a-1))
+		if ext == "tsv" then
+			local data
+			local success,e = blt.pcall(function()
+				data = self.parse_l10n_csv(l10n_path .. filename)
+			end)
+			if not success then
+				self:Print("Could not load localization file:",filename,e)
+			else
+				local lang_name = string.reverse(string.sub(lang_rev,b+1))
+				
+				self._language_data[lang_name] = data
+				
+				if self._is_loc_loaded then
+					managers.localization:add_localized_strings({
+						["qc_lang_" .. lang_name] = data.qc_this_language
+					})
+				else
+					Hooks:Add("LocalizationManagerPostInit","QuickChat_add_lang_codes",function(loc)
+						loc:add_localized_strings({
+							["qc_lang_" .. lang_name] = data.qc_this_language
+						})
+					end)
+				end
+			end
+		else
+			self:Print("Invalid localization format:",ext)
+		end
+	end
+	self:Log("Done loading localization files.")
+end
+
 function QuickChat.parse_l10n_csv(path) -- not yet implemented
-	local selected_language = "english"
-	local i = 0
+	local line_num = 0
 	local lang_code
 	local all_data = {}
-	for line in pairs(file:lines()) do 
-		i = i + 1
+	local file = io.open(path,"r+")
+
+	for line in file:lines() do 
+		line_num = line_num + 1
 		local this_row = string.split(line,"\t")
-		if i ~= 1 then
+		if line_num ~= 1 then
+			for column=1,#this_row,1 do 
+				local c_data = all_data[column]
+				if c_data then
+					table.insert(c_data,#c_data+1,this_row[column] or "")
+				end
+			end
+		else
 			for column=1,#this_row,1 do 
 				all_data[column] = {}
 			end
 			lang_code = this_row[2]
-		else
-			for column=1,#this_row,1 do 
-				local c_data = all_data[column]
-				if c_data then
-					table.insert(c_data,#c_data+1,this_row[column])
-				end
-			end
 		end
 	end
+	file:close()
 	
-	return all_data
+	local num_lines = #all_data[1]
+	
+	local lang_data = {}
+	for i=1,num_lines,1 do
+		local loc_id = all_data[1][i]
+		local loc_str = all_data[2][i]
+		if loc_id and string.gsub(loc_id,"%s","") ~= "" then
+			lang_data[loc_id] = loc_str
+		end
+	end
+	return lang_data
 end
 
 function QuickChat._animate_grow(o,duration,speed,w,h,c_x,c_y)
@@ -1438,7 +1529,7 @@ function QuickChat:Print(...)
 	if Console then
 		Console:Print(...)
 	else
-		--log(...)
+		log(...)
 	end
 end
 
@@ -1599,6 +1690,9 @@ function QuickChat:CheckResourcesReady(skip_load,done_loading_cb)
 	return resources_ready
 end
 
+function QuickChat:GetUserLanguage()
+	return self.settings.user_language
+end
 
 --Setup
 
@@ -3472,7 +3566,11 @@ function QuickChat:UpdateWaypoints(t,dt)
 	local waypoint_reverse_dot = waypoint_attenuate_alpha_mode == 3
 	
 --	local player = managers.player:local_player()
-	local local_peer_id = managers.network:session():local_peer():id() --todo cache this?
+	local session = managers.network:session()
+	if not session then 
+		return
+	end
+	local local_peer_id = session:local_peer():id() --todo cache this?
 	for peer_id,peer_data in pairs(self._synced_waypoints) do 
 		for waypoint_id=#peer_data,1,-1 do 
 			
@@ -3871,6 +3969,9 @@ end
 
 
 Hooks:Add("MenuManagerSetupCustomMenus","QuickChat_MenuManagerSetupCustomMenus",function(menu_manager, nodes)
+	QuickChat:LoadLanguageFiles()
+	QuickChat:ChooseLanguage(QuickChat._DEFAULT_LANGUAGE_ID) -- default
+	
 	QuickChat:CheckResourcesReady()
 	
 	QuickChat:UnpackGamepadBindings()
@@ -4224,11 +4325,46 @@ Hooks:Add("MenuManagerPopulateCustomMenus","QuickChat_MenuManagerPopulateCustomM
 	end
 	
 	
+	
+	local selected_lang_index = 1
+	local selected_lang_id = QuickChat:GetUserLanguage()
+	local user_lang_callback_id = "callback_qc_set_user_language"
+	
+	
+	-- populate language items
+	
+	local lang_items = {} -- index : loc(qc_this_language)
+	local lang_ids = {} -- index : code2
+	for lang_id,lang_data in pairs(QuickChat._language_data) do
+		local lang_name_localized = lang_data.qc_this_language
+		table.insert(lang_ids,lang_id)
+	end
+	table.sort(lang_ids,function(a,b)
+		return managers.localization:text(a) < managers.localization:text(b)
+	end)
+	for i,lang_id in ipairs(lang_ids) do
+		lang_items[i] = "qc_lang_" .. lang_id
+		if lang_id == selected_lang_id then
+			selected_lang_index = i
+		end
+	end
+	
+	MenuCallbackHandler[user_lang_callback_id] = function(this,item)
+		local selected_index = validate(item:value(),"number")
+		QuickChat:ChooseLanguage(lang_ids[selected_index])
+		QuickChat:SaveSettings()
+	end
+	
+	
+	
+	
+	
 	local selected_sound_index = 1
 	local selected_sound_id = QuickChat.settings.waypoints_ping_sound_id
 	local sound_items = {} -- index:loc_id
 	local sound_ids = {} -- index:id 
 	local sound_locs = {} -- loc_id:str
+	
 	for id,path in pairs(QuickChat._ping_sounds) do 
 		local i = #sound_items+1
 		local loc_str = "qc_menu_snd_" .. id
@@ -4261,9 +4397,21 @@ Hooks:Add("MenuManagerPopulateCustomMenus","QuickChat_MenuManagerPopulateCustomM
 				src:set_volume(QuickChat:GetWaypointSfxVolume())
 			end
 		end
+		QuickChat:SaveSettings()
 	end
 	
 	local settings_items = {
+		{
+			type = "multiple_choice",
+			id = "qc_menu_user_language",
+			title = "qc_menu_user_language_title",
+			desc = "qc_menu_user_language_title_desc",
+			items = table.deep_map_copy(lang_items),
+			callback = user_lang_callback_id,
+			skip_callback = true,
+			value_raw = selected_lang_index,
+			value_type = "number"
+		},
 		{
 			type = "toggle",
 			id = "menu_waypoints_ping_sound_enabled",
@@ -4519,9 +4667,15 @@ Hooks:Add("MenuManagerInitialize","QuickChat_MenuManagerInitialize",function(men
 end)
 
 Hooks:Add("LocalizationManagerPostInit","QuickChat_LocalizationManagerPostInit",function(loc)
-	if not BeardLib then 
-		loc:load_localization_file(QuickChat._mod_path .. "loc/english.json")
+	--if not BeardLib then 
+	--	loc:load_localization_file(QuickChat._mod_path .. "loc/english.json")
+	--end
+	
+	QuickChat._is_loc_loaded = true
+	if not QuickChat._is_loc_loaded then	
+		--QuickChat:ChooseLanguage(QuickChat.settings.user_language)
 	end
+	
 	if QuickChat._localized_sound_names then
 		loc:add_localized_strings(QuickChat._localized_sound_names)
 	end
