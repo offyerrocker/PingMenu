@@ -1,5 +1,6 @@
 {
-	"qc_ptm_this_language" : "English",
+	"qc_this_language" : "English",
+	"qc_hud_needs_something_template" : "I need..."
 	"qc_ptm_general_yes" : "Yes",
 	"qc_ptm_general_no" : "No",
 	"qc_ptm_general_cheer" : "Let's do this!",
@@ -13,7 +14,7 @@
 	"qc_ptm_general_goodgame_toxic" : "ggez",
 	"qc_ptm_general_bye" : "Goodbye!",
 	"qc_ptm_general_brb" : "BRB, I need to step away for a moment.",
-	"qc_ptm_general_nokeyboard" : "I seem to have misplaced my keyboard.",
+	"qc_ptm_general_nokeyboard" : "I don't have a keyboard.",
 	"qc_ptm_general_leaving_now" : "I'm leaving now.",
 	"qc_ptm_general_leaving_soon" : "I need to go soon.",
 	"qc_ptm_general_leaving_last_game" : "This will be my last heist.",
@@ -52,6 +53,7 @@
 	"qc_ptm_need_tripmine" : "Place a Trip Mine here!",
 	"qc_ptm_need_shapedcharge" : "Place a Shaped Charge here!",
 	"qc_ptm_need_grenades" : "Place a Grenade Crate here!",
+	"qc_ptm_need_bodybags" : "Place a Body Bag Case here!",
 	"qc_ptm_need_convert" : "I need a convert!",
 	"qc_ptm_need_ties" : "I need this person cable-tied!",
 	"qc_ptm_enemy_sniper" : "Sniper!",

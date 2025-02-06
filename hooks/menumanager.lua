@@ -2,9 +2,12 @@
 	-- fix custom radial assets
 	-- csv parser
 	-- allow communication wheels during menu
-	-- when holding ping button, visualize a raycast to the hit unit
-	-- unify preview labels and sync labels
-	
+	-- pass generation userdata to items
+	-- test waypoints through cameras?
+	-- toggle for allowing unit tagging
+	-- allow peers to send a mute command
+	-- radial deadzone/size menu option
+	-- language selection
 	--SCHEMA
 		--validate buttons on startup; no duplicate actions in binds
 		
@@ -22,6 +25,8 @@
 		
 		--proximity priority for spherecast
 	--FEATURES
+		-- when holding ping button, visualize a raycast to the hit unit
+	
 		--linger time for timer waypoints
 		
 		--modifier key to force placement
@@ -95,6 +100,7 @@ QuickChat._core = QuickChatCore
 QuickChat._mod_path = (QuickChatCore and QuickChatCore.GetPath and QuickChatCore:GetPath()) or ModPath
 QuickChat._save_path = SavePath .. "QuickChat/"
 QuickChat._save_layouts_path = QuickChat._save_path .. "layouts/"
+QuickChat._assets_path = QuickChat._mod_path .. "assets/"
 QuickChat._bindings_name = "bindings_$WRAPPER.json"
 QuickChat._settings_name = "settings.json"
 QuickChat.default_settings = {
@@ -102,6 +108,8 @@ QuickChat.default_settings = {
 	--compatibility_gcw_send_enabled = true, -- deprecated/combined into compatibility_gcw_enabled
 	--compatibility_gcw_receive_enabled = true, -- deprecated/combined into compatibility_gcw_enabled
 	compatibility_gcw_enabled = true,
+	radial_deadzone = 72,
+	radial_size = 300,
 	waypoints_alert_on_registration = true,
 	--waypoints_max_count = 1, --deprecated
 	waypoints_acknowledge_sound_enabled = true,
@@ -119,6 +127,8 @@ QuickChat.settings = table.deep_map_copy(QuickChat.default_settings) --general u
 QuickChat.sort_settings = {
 	"debug_draw",
 	"compatibility_gcw_enabled",
+	"radial_deadzone",
+	"radial_size",
 	"waypoints_alert_on_registration",
 	--"waypoints_max_count",
 	"waypoints_ping_sound_enabled",
@@ -138,6 +148,7 @@ QuickChat.WAYPOINT_PANEL_SIZE = 100
 QuickChat.WAYPOINT_ANIMATE_FADEIN_DURATION = 5 --pulse for 3 seconds total
 QuickChat.WAYPOINT_ANIMATE_PULSE_INTERVAL = 1 --1 second per complete pulse anim
 
+QuickChat._MESSAGE_PRESET_FORMAT = "%s" -- how pre-translated message "presets" appear to quickchat users (this stylization is not applied to messages sent to non-qc players)
 QuickChat.SYNC_MESSAGE_PRESET = "QuickChat_message_preset"
 QuickChat.SYNC_MESSAGE_QC_HANDSHAKE = "QuickChat_Register"
 QuickChat.SYNC_MESSAGE_WAYPOINT_ADD = "QuickChat_SendWaypoint"
@@ -420,7 +431,7 @@ QuickChat._icon_presets_by_index = {
 	{
 		source = 1,
 		icon_id = "equipment_doctor_bag" --59
-	},
+	}, -- fak is 169, bodybags is 170. they aren't here because i forgot about them whoops
 	{
 		source = 1,
 		icon_id = "equipment_ecm_jammer" --60
@@ -936,6 +947,14 @@ QuickChat._icon_presets_by_index = {
 	{
 		source = 1, --infamy spade (the same one that gcw uses)
 		icon_id = "infamy_icon_1" -- 168
+	},
+	{
+		source = 1,
+		icon_id = "equipment_first_aid_kit" --169
+	},
+	{
+		source = 1,
+		icon_id = "debug_equipment_bodybags_bag" --170
 	}
 }
 QuickChat._icon_presets_by_name = {}
@@ -973,43 +992,43 @@ QuickChat._message_presets = {
 	"qc_ptm_general_bye",					--12
 	"qc_ptm_general_brb",					--13
 	"qc_ptm_general_nokeyboard",			--14
-	"qc_ptm_general_leaving_now",			--15
-	"qc_ptm_general_leaving_soon",			--16
-	"qc_ptm_general_leaving_last_game",		--17
-	"qc_ptm_general_healembargo",			--18
-	"qc_ptm_general_achievementhunting",	--19
-	"qc_ptm_comms_claim",					--20
-	"qc_ptm_comms_help",					--21
-	"qc_ptm_comms_follow",					--22
-	"qc_ptm_comms_attack",					--23
-	"qc_ptm_comms_defend",					--24
-	"qc_ptm_comms_regroup",					--25
-	"qc_ptm_comms_reviving",				--26
-	"qc_ptm_comms_comehere",				--27
-	"qc_ptm_comms_caution",					--28
-	"qc_ptm_comms_opening_door",			--29
-	"qc_ptm_comms_jammed_drill",			--30
-	"qc_ptm_comms_jammed_hack",				--31
-	"qc_ptm_direction_left",				--32
-	"qc_ptm_direction_right",				--33
-	"qc_ptm_direction_up",					--34
-	"qc_ptm_direction_down",				--35
-	"qc_ptm_direction_forward",				--36
-	"qc_ptm_direction_backward",			--37
-	"qc_ptm_tactic_ask_stealth",			--38
-	"qc_ptm_tactic_ask_hybrid",				--39
-	"qc_ptm_tactic_ask_loud",				--40
-	"qc_ptm_tactic_suggest_stealth",		--41
-	"qc_ptm_tactic_suggest_hybrid",			--42
-	"qc_ptm_tactic_suggest_loud",			--43
-	"qc_ptm_need_docbag",					--44
-	"qc_ptm_need_fak",						--45
-	"qc_ptm_need_ammo",						--46
-	"qc_ptm_need_ecm",						--47
-	"qc_ptm_need_sentrygun",				--48
-	"qc_ptm_need_sentrygun_silent",			--49
-	"qc_ptm_need_tripmine",					--50
-	"qc_ptm_need_shapedcharge",				--51
+	"qc_ptm_general_leaving_soon",			--15
+	"qc_ptm_general_leaving_last_game",		--16
+	"qc_ptm_general_healembargo",			--17
+	"qc_ptm_general_achievementhunting",	--18
+	"qc_ptm_comms_claim",					--19
+	"qc_ptm_comms_help",					--20
+	"qc_ptm_comms_follow",					--21
+	"qc_ptm_comms_attack",					--22
+	"qc_ptm_comms_defend",					--23
+	"qc_ptm_comms_regroup",					--24
+	"qc_ptm_comms_reviving",				--25
+	"qc_ptm_comms_comehere",				--26
+	"qc_ptm_comms_caution",					--27
+	"qc_ptm_comms_opening_door",			--28
+	"qc_ptm_comms_jammed_drill",			--29
+	"qc_ptm_comms_jammed_hack",				--30
+	"qc_ptm_direction_left",				--31
+	"qc_ptm_direction_right",				--32
+	"qc_ptm_direction_up",					--33
+	"qc_ptm_direction_down",				--34
+	"qc_ptm_direction_forward",				--35
+	"qc_ptm_direction_backward",			--36
+	"qc_ptm_tactic_ask_stealth",			--37
+	"qc_ptm_tactic_ask_hybrid",				--38
+	"qc_ptm_tactic_ask_loud",				--39
+	"qc_ptm_tactic_suggest_stealth",		--40
+	"qc_ptm_tactic_suggest_hybrid",			--41
+	"qc_ptm_tactic_suggest_loud",			--42
+	"qc_ptm_need_docbag",					--43
+	"qc_ptm_need_fak",						--44
+	"qc_ptm_need_ammo",						--45
+	"qc_ptm_need_ecm",						--46
+	"qc_ptm_need_sentrygun",				--47
+	"qc_ptm_need_sentrygun_silent",			--48
+	"qc_ptm_need_tripmine",					--59
+	"qc_ptm_need_shapedcharge",				--50
+	"qc_ptm_need_bodybags",                 --51
 	"qc_ptm_need_grenades",					--52
 	"qc_ptm_need_convert",					--53
 	"qc_ptm_need_ties",						--54
@@ -1017,12 +1036,16 @@ QuickChat._message_presets = {
 	"qc_ptm_enemy_cloaker",					--56
 	"qc_ptm_enemy_taser",					--57
 	"qc_ptm_enemy_dozer",					--58
-	"qc_ptm_enemy_medic",					--59
+	"qc_ptm_enemy_medic",					--69
 	"qc_ptm_enemy_shield",					--60
 	"qc_ptm_enemy_msniper",					--61
 	"qc_ptm_enemy_mshield",					--62
-	"qc_ptm_enemy_winters"					--63
+	"qc_ptm_enemy_winters",					--63
 }
+QuickChat._message_presets_by_name = {}
+for i,name in ipairs(QuickChat._message_presets) do
+	QuickChat._message_presets_by_name[name] = i
+end
 
 QuickChat._message_cooldowns = {} -- locally enforced chat rate limiter
 QuickChat.TEXT_MESSAGE_COOLDOWN_COUNT = 3 -- maximum of three messages
@@ -1030,13 +1053,56 @@ QuickChat.TEXT_MESSAGE_COOLDOWN_INTERVAL = 2 -- each one has a cooldown of 2 sec
 
 QuickChat._localized_sound_names = {} -- holds sound names for the menu's multiplechoice
 QuickChat._ping_sounds = { -- only played locally, controlled by local user settings
-	standard = QuickChat._mod_path .. "assets/sounds/PingStandard.ogg",
-	retro = QuickChat._mod_path .. "assets/sounds/PingRetro.ogg",
-	scifi = QuickChat._mod_path .. "assets/sounds/PingScifi.ogg",
-	whip = QuickChat._mod_path .. "assets/sounds/PingWhip.ogg",
-	meme = QuickChat._mod_path .. "assets/sounds/PingMeme.ogg"
+	standard = QuickChat._assets_path .. "sounds/PingStandard.ogg",
+	retro = QuickChat._assets_path .. "sounds/PingRetro.ogg",
+	scifi = QuickChat._assets_path .. "sounds/PingScifi.ogg",
+	whip = QuickChat._assets_path .. "sounds/PingWhip.ogg",
+	meme = QuickChat._assets_path .. "sounds/PingMeme.ogg"
 }
-QuickChat._ACKNOWLEDGED_SFX_PATH = QuickChat._mod_path .. "assets/sounds/PingAcknowledged.ogg"
+QuickChat._ACKNOWLEDGED_SFX_PATH = QuickChat._assets_path .. "sounds/PingAcknowledged.ogg"
+
+QuickChat._CUSTOM_RESOURCES = {
+--[[
+	["guis/textures/radial_menu/darklight"] = {
+		file_ext = "png",
+		resource_ext = "texture"
+	},
+	["guis/textures/radial_menu/highlight"] = {
+		file_ext = "png",
+		resource_ext = "texture"
+	},
+	--]]
+	["guis/textures/radial_menu/foreground"] = {
+		file_ext = "png",
+		resource_ext = "texture"
+	},
+	["guis/textures/radial_menu/background"] = {
+		file_ext = "png",
+		resource_ext = "texture"
+	},
+	["guis/textures/radial_menu/cursor"] = {
+		file_ext = "texture",
+		resource_ext = "texture"
+	},
+	["guis/textures/pd2/quickchatmod/waypoint_icons_atlas"] = {
+		file_ext = "texture",
+		resource_ext = "texture"
+	}
+	--[[
+,	["fonts/font_qc_glyphs"] = {
+		file_ext = "texture",
+		resource_ext = "texture"
+	},
+	["fonts/font_qc_glyphs"] = {
+		file_ext = "texture",
+		resource_ext = "texture"
+	},
+	["fonts/font_small_noshadow"] = {
+		file_ext = "texture",
+		resource_ext = "texture"
+	}
+	--]]
+}
 
 QuickChat.POSITIONAL_AUDIO_DISTANCE = 100 -- distance at which waypoint sfx will play 
 
@@ -1356,6 +1422,10 @@ function QuickChat._animate_grow(o,duration,speed,w,h,c_x,c_y)
 	o:set_center(c_x,c_y)
 end
 
+function QuickChat:stylize_translated_message(s)
+	return string.format(self._MESSAGE_PRESET_FORMAT,s)
+end
+
 function QuickChat:Log(msg)
 	if Console then
 		Console:Log(msg)
@@ -1432,6 +1502,14 @@ function QuickChat:IsWaypointRegistrationAlertEnabled()
 	return self.settings.waypoints_alert_on_registration
 end
 
+function QuickChat:GetRadialDeadzone()
+	return self.settings.radial_deadzone
+end
+
+function QuickChat:GetRadialSize()
+	return self.settings.radial_size
+end
+
 function QuickChat:IsGCWCompatibilityReceiveEnabled()
 	return self.settings.compatibility_gcw_enabled
 end
@@ -1448,6 +1526,79 @@ end
 function QuickChat:IsDebugDrawEnabled()
 	return self.settings.debug_draw
 end
+
+-- Asset loading
+function QuickChat:CheckResourcesAdded(skip_load)
+	local assets_path = self._assets_path
+	
+	-- cache idstrings of extensions for perf; 
+	-- won't make a huge difference, but it's good to do in case this mod ends up using a lot of custom assets
+	local type_ids = {
+		--[[
+		texture = Idstring("texture")
+		--]]
+	}
+	for path,data in pairs(self._CUSTOM_RESOURCES) do 
+		local ids_resource_ext = type_ids[data.resource_ext]
+		if not ids_resource_ext then
+			ids_resource_ext = Idstring(data.resource_ext)
+			type_ids[data.resource_ext] = ids_resource_ext
+		end
+		if DB and DB:has(ids_resource_ext, path) then 
+			-- resource is already in the asset db
+		else
+			if not skip_load then 
+				local full_asset_path = assets_path .. path
+				self:Print("Adding asset...",full_asset_path,"as",path)
+				BLT.AssetManager:CreateEntry(Idstring(path),ids_resource_ext,full_asset_path .. "." .. data.file_ext)
+			end
+		end
+	end
+end
+
+function QuickChat:CheckResourcesReady(skip_load,done_loading_cb)
+	self:Log("[QuickChat] Checking assets...")
+	local assets_path = self._assets_path
+	local dyn_pkg = DynamicResourceManager.DYN_RESOURCES_PACKAGE
+
+	if done_loading_cb and done_loading_cb ~= false then 
+		done_loading_cb = function(done,resource_type_ids,resource_ids)
+			if done then 
+				self:Print("Completed manual asset loading for",resource_ids)
+			end
+		end
+		
+	end
+	
+	local type_ids = {
+		--[[
+		texture = Idstring("texture")
+		--]]
+	}
+	
+	local resources_ready = true
+	for path,data in pairs(self._CUSTOM_RESOURCES) do 
+		local ids_path = Idstring(path)
+		local ids_resource_ext = type_ids[data.resource_ext]
+		if not ids_resource_ext then
+			ids_resource_ext = Idstring(data.resource_ext)
+			type_ids[data.resource_ext] = ids_resource_ext
+		end
+		
+		if not managers.dyn_resource:is_resource_ready(ids_resource_ext,ids_path,dyn_pkg) then 
+			if not skip_load then 
+				self:Print("Creating DB entry for",data.resource_ext,path,data.file_ext)
+				managers.dyn_resource:load(ids_resource_ext,ids_path,dyn_pkg,done_loading_cb)
+			end
+			self:Print("Resource is not ready:",path,data.file_ext,(skip_load and "...Skipped loading." or "...Started manual load."))
+			resources_ready = false
+		else
+			self:Print("Resource is ready:",data.resource_ext,path,data.file_ext)
+		end
+	end
+	return resources_ready
+end
+
 
 --Setup
 
@@ -1797,10 +1948,13 @@ function QuickChat:LoadMenuFromIni(ini_data) --converts and validates saved data
 			"focus_alpha",
 			"unfocus_alpha",
 			"item_margin",
-			"reset_mouse_position_on_show",
-			"item_text_visible"
+			"item_text_visible",
+			"mouseover_text_visible",
+			"reset_mouse_position_on_show"
+			--"default_mouseover_text"
 		}
 		local basic_item_values = {
+			"mouseover_text",
 			"keep_open",
 			"font",
 			"font_size"
@@ -1809,9 +1963,18 @@ function QuickChat:LoadMenuFromIni(ini_data) --converts and validates saved data
 		local body = ini_data.RadialMenu
 		local id = body.id
 		local default_menu_data = {
-			--texture_highlight="guis/textures/radial_menu/highlight",
-			--texture_darklight="guis/textures/radial_menu/darklight",
-			--texture_cursor="guis/textures/radial_menu/cursor"
+			size = self:GetRadialSize(),
+			deadzone = self:GetRadialDeadzone(),
+			focus_alpha = 1,
+			unfocus_alpha = 0.5,
+			item_margin = 0.2,
+			item_text_visible=true,
+			mouseover_text_visible=true,
+			reset_mouse_position_on_show=true,
+			--default_mouseover_text = nil
+			texture_highlight="guis/textures/radial_menu/foreground",
+			texture_darklight="guis/textures/radial_menu/background",
+			texture_cursor="guis/textures/radial_menu/cursor"
 			
 		} --self._radial_menu_params.default
 		
@@ -1820,6 +1983,8 @@ function QuickChat:LoadMenuFromIni(ini_data) --converts and validates saved data
 			for _,key in pairs(basic_body_values) do 
 				if body[key] ~= nil then 
 					new_menu_params[key] = body[key]
+				else
+					new_menu_params[key] = default_menu_data[key]
 				end
 			end
 			
@@ -1840,20 +2005,42 @@ function QuickChat:LoadMenuFromIni(ini_data) --converts and validates saved data
 				
 			end
 			
+			if body.default_mouseover_text then
+				new_menu_params.default_mouseover_text = managers.localization:text(body.default_mouseover_text)
+			end
+			
 			new_menu_params.texture_highlight = body.texture_highlight or default_menu_data.texture_highlight
 			new_menu_params.texture_darklight = body.texture_darklight or default_menu_data.texture_darklight
 			new_menu_params.texture_cursor = body.texture_cursor or default_menu_data.texture_cursor
 			
 			for i,item_data in ipairs(ini_data) do 
-				local new_item = {}
+				
+				local preset_text_index -- send pretranslated chat message
+				local text_message -- send custom chat message
+				local voice = item_data.voice -- player voiceline
+				local gesture = item_data.gesture -- player fp animation
+				local waypoint = item_data.waypoint -- if true, place waypoint
+				local timer = item_data.timer and tonumber(item_data.timer) -- countdown timer for waypoint
+				local icon_index -- used for waypoints
+				local label_index -- used for waypoints
+				
+				local new_item = {
+					userdata = nil, -- gets set later
+					mouseover_text = nil -- gets set later
+				}
+				
 				if item_data.icon and self._icon_presets_by_name[item_data.icon] then
 					local texture,texture_rect = self:GetIconDataByName(item_data.icon)
 					new_item.texture = texture
 					new_item.texture_rect = texture_rect
+					
+					icon_index = self._icon_presets_by_name[item_data.icon]
 				elseif item_data.icon_index and self._icon_presets_by_index[item_data.icon_index] then
 					local texture,texture_rect = self:GetIconDataByIndex(item_data.icon_index)
 					new_item.texture = texture
 					new_item.texture_rect = texture_rect
+					
+					icon_index = item_data.icon_index
 				elseif item_data.texture then
 					new_item.texture = item_data.texture
 					if item_data.texture_rect then 
@@ -1861,22 +2048,34 @@ function QuickChat:LoadMenuFromIni(ini_data) --converts and validates saved data
 					end
 				end
 				
-				local message_preset_index = item_data.preset_text_index and self._message_presets[item_data.preset_text_index]
-				local message_preset_name = message_preset_index and self._message_presets[message_preset_index]
-				if message_preset_name then 
-					new_item.preset_text_index = message_preset_index
+				if item_data.preset_text_index and self._message_presets[item_data.preset_text_index] then
+					preset_text_index = item_data.preset_text_index
+				elseif item_data.preset_text then
+					local message_preset_index = item_data.preset_text and self._message_presets_by_name[item_data.preset_text]
+					if message_preset_index and self._message_presets[message_preset_index] then
+						preset_text_index = message_preset_index
+					end
 				end
+				
 				if item_data.preview_text then --not localized
 					new_item.text = item_data.preview_text
 				elseif item_data.text then 
 					new_item.text = item_data.text
-				elseif item_data.label_id then
-					new_item.text = managers.localization:text(item_data.label_id)
+					text_message = item_data.text
+				elseif item_data.text_id then
+					-- localized but not used for waypoint
+					new_item.text = managers.localization:text(item_data.text_id)
+				elseif body.use_preset_as_radial_label and item_data.preset_text then
+					new_item.text = managers.localization:text(item_data.preset_text)
+				end
+				
+				if item_data.label_id then
+					new_item.text = new_item.text or managers.localization:text(item_data.label_id)
+					label_index = self._label_presets_by_name[item_data.label_id]
 				elseif item_data.label_index then
 					local label = self._label_presets_by_index[item_data.label_index]
-					new_item.text = label and managers.localization:text(label)
-				elseif message_preset_name then
-					new_item.text = managers.localization:text(message_preset_name)
+					new_item.text = new_item.text or (label and managers.localization:text(label))
+					label_index = item_data.label_index
 				end
 				
 				if item_data.color then 
@@ -1892,7 +2091,24 @@ function QuickChat:LoadMenuFromIni(ini_data) --converts and validates saved data
 					end
 				end
 				
-				if item_data.custom_callback then 
+				local userdata = {
+					-- expected fields (all optional):
+					preset_text_index = preset_text_index, -- int; checked before text
+					text_message = text_message, -- string; used if preset_text_index is not valid
+					
+					voice = voice, -- string
+					gesture = gesture, -- string
+					
+					waypoint = waypoint, -- bool
+					timer = timer, -- float; only used if waypoint is true
+					label_index = label_index, -- int
+					icon_index = icon_index -- int
+				}
+				new_item.user_data = userdata
+				new_item.mouseover_text = preset_text_index and managers.localization:text(self._message_presets[preset_text_index]) or nil
+				
+				
+				if false and item_data.custom_callback then -- i don't like executing random code from shared radial files actually
 					local f,e = loadstring(custom_callback)
 					if f then 
 						new_item.callback = f
@@ -1901,7 +2117,7 @@ function QuickChat:LoadMenuFromIni(ini_data) --converts and validates saved data
 	--					log(e)
 					end
 				else
-					new_item.callback = callback(self,self,"CallbackRadialSelection",item_data)
+					new_item.callback = callback(self,self,"CallbackRadialSelection",userdata)
 				end
 				
 				for _,key in pairs(basic_item_values) do 
@@ -1928,30 +2144,33 @@ function QuickChat:ToggleMenu(id)
 	end
 end
 
-function QuickChat:CallbackRadialSelection(item_data) --callback for selecting a radial option
-	local preset_text_index = item_data.preset_text_index
-	local text = item_data.text
-	if item_data.waypoint then
+function QuickChat:CallbackRadialSelection(userdata) --callback for selecting a radial option
+
+	if userdata.waypoint then
 		--do not perform other callback actions if waypoint placement fails
-		local success = self:AddWaypoint(item_data) 
+		local success = self:AddWaypoint({
+			icon_index = userdata.icon_index,
+			label_index = userdata.label_index,
+			timer = userdata.timer
+		}) 
 		if not success then
 			--todo feedback here
 			return
 		end
 	end
 	
-	if item_data.voice then
-		self:PlayCriminalSound(item_data.voice)
+	if userdata.voice then
+		self:PlayCriminalSound(userdata.voice)
 	end
 	
-	if item_data.gesture then
-		self:PlayGesture(item_data.gesture)
+	if userdata.gesture then
+		self:PlayGesture(userdata.gesture)
 	end
 	
-	if preset_text_index then 
-		self:SendPresetMessage(preset_text_index)
-	elseif text then
-		self:SendChatToAll(text)
+	if userdata.preset_text_index then 
+		self:SendPresetMessage(userdata.preset_text_index)
+	elseif userdata.text_message then
+		self:SendChatToAll(userdata.text_message)
 	end
 end
 
@@ -2963,7 +3182,8 @@ function QuickChat:SendPresetMessage(preset_text_index)
 								end
 							end
 						end
-						managers.chat:receive_message_by_peer(ChatManager.GAME,local_peer,"<" .. text_localized .. ">")
+						
+						managers.chat:receive_message_by_peer(ChatManager.GAME,local_peer,self:stylize_translated_message(text_localized))
 					end
 				end
 			end
@@ -2989,7 +3209,7 @@ function QuickChat:ReceivePresetMessage(peer_id,preset_text_index)
 						local text_localized = managers.localization:text(preset_text)
 						--local quickchat_version = peer._quickchat_version
 						--if the QC API changes in the future, inbound messages will be reformatted here
-						managers.chat:_receive_message(ChatManager.GAME,username,"<" .. text_localized .. ">",peer_color)
+						managers.chat:_receive_message(ChatManager.GAME,username,self:stylize_translated_message(text_localized),peer_color)
 					end
 				end
 			end
@@ -3651,6 +3871,8 @@ end
 
 
 Hooks:Add("MenuManagerSetupCustomMenus","QuickChat_MenuManagerSetupCustomMenus",function(menu_manager, nodes)
+	QuickChat:CheckResourcesReady()
+	
 	QuickChat:UnpackGamepadBindings()
 	QuickChat:LoadCustomRadials()
 	QuickChat:Load()
@@ -4340,3 +4562,5 @@ Hooks:Add("BaseNetworkSessionOnLoadComplete","QuickChat_OnLoaded",callback(Quick
 Hooks:Add("GameSetupUpdate","QuickChat_GameUpdate",callback(QuickChat,QuickChat,"Update","GameSetupUpdate"))
 Hooks:Add("GameSetupPausedUpdate","QuickChat_GamePausedUpdate",callback(QuickChat,QuickChat,"Update","GameSetupPausedUpdate"))
 Hooks:Add("MenuUpdate","QuickChat_MenuUpdate",callback(QuickChat,QuickChat,"Update","MenuUpdate"))
+
+QuickChat:CheckResourcesAdded()

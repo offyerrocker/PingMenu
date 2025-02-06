@@ -130,6 +130,7 @@ function RadialMenuObject:setup(params) --create new instance of a radial select
 		texture_cursor = params.texture_cursor,
 		focus_alpha = params.focus_alpha or 1,
 		unfocus_alpha = params.unfocus_alpha or 0.5,
+		default_mouseover_text = params.default_mouseover_text,
 		animate_focus_grow_size = params.animate_focus_grow_size or 1.66,
 		animate_focus_duration = params.animate_focus_duration or 0.33,
 		animate_unfocus_duration = params.animate_unfocus_duration or 0.33,
@@ -304,7 +305,7 @@ function RadialMenuDialog:recreate_gui()
 	
 	local mouseover_label = panel:text({
 		name = "mouseover_label",
-		text = "",
+		text = data.default_mouseover_text or "",
 		font = data.font or "fonts/font_medium_shadow_mf",
 		font_size = data.font_size or 24,
 		align = "center",
@@ -400,6 +401,7 @@ function RadialMenuDialog:recreate_gui()
 			darklight = darklight,
 			label = label,
 			text = item.text,
+			mouseover_text = item.mouseover_text,
 			focus_alpha = data.focus_alpha,
 			unfocus_alpha = data.unfocus_alpha,
 --			active_color = active_color,
@@ -529,11 +531,13 @@ function RadialMenuDialog:on_mouseover_item(current_index,previous_index)
 			item_data.darklight:hide()
 			item_data.highlight:show()
 		end
-		if item_data.text then
+		if item_data.mouseover_text then
+			self:set_mouseover_text(item_data.mouseover_text)
+		elseif item_data.text then
 			self:set_mouseover_text(item_data.text)
 		end
 	else
-		self:set_mouseover_text("")
+		self:set_mouseover_text(self._data.mouseover_text_visible and self._data.default_mouseover_text or "")
 	end
 	
 	if prev_data then
@@ -713,7 +717,7 @@ function RadialMenuDialog:hide(select_current)
 		end
 		self:on_mouseover_item(nil,index)
 		self:clear_selected_index()
-		self:set_mouseover_text("")
+		self:set_mouseover_text(self._data.mouseover_text_visible and self._data.default_mouseover_text or "")
 	else
 		self:callback_on_cancelled()
 	end
