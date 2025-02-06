@@ -72,6 +72,8 @@
 	"qc_wp_kill" : "Kill",
 	"qc_wp_deploy" : "Deploy",
 	"qc_wp_interact" : "Interact",
+	"qc_wp_defend" : "Defend",
+	"qc_wp_avoid" : "Avoid",
 	
 	"qc_controller_pc" : "Mouse + Keyboard",
 	"qc_controller_xbox360" : "Xbox 360 Controller",

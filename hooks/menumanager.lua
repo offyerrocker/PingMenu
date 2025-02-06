@@ -1,9 +1,9 @@
 --TODO
+	-- fix custom radial assets
 	-- csv parser
 	-- allow communication wheels during menu
 	-- when holding ping button, visualize a raycast to the hit unit
 	-- unify preview labels and sync labels
-	-- fix custom radial assets
 	
 	--SCHEMA
 		--validate buttons on startup; no duplicate actions in binds
@@ -12,8 +12,6 @@
 		--todo use _supported_controller_type_map instead of manual mapping?
 			--may not be necessary if only the wrapper type is used
 		--needs VR support
-		--generalize keybinds so that they can serve general callbacks instead of just radial menus
-			--this will also make mouse button support easier
 		--split paused/nonpaused updaters into separate tables for efficiency
 		--offscreen waypoint arrow needs visual adjustment
 			--arrow triangle is too even
@@ -27,7 +25,7 @@
 		--linger time for timer waypoints
 		
 		--modifier key to force placement
-		--modifier key to go through glass
+		--modifier key to go through glass(thin walls)
 		--modifier key for timers
 		
 		-- ping existing vanilla waypoints
@@ -951,7 +949,9 @@ QuickChat._label_presets_by_index = {
 	"qc_wp_bag",							--3
 	"qc_wp_kill",							--4
 	"qc_wp_deploy",							--5
-	"qc_wp_interact"						--6
+	"qc_wp_interact",						--6
+	"qc_wp_defend",							--7
+	"qc_wp_avoid"							--8
 }
 QuickChat._label_presets_by_name = {} -- reverse lookup table
 for index,id in ipairs(QuickChat._label_presets_by_index) do 
@@ -1865,12 +1865,16 @@ function QuickChat:LoadMenuFromIni(ini_data) --converts and validates saved data
 				local message_preset_name = message_preset_index and self._message_presets[message_preset_index]
 				if message_preset_name then 
 					new_item.preset_text_index = message_preset_index
-					new_item.text = managers.localization:text(message_preset_name)
-				elseif item_data.text then 
-					new_item.text = item_data.text
 				end
 				if item_data.preview_text then --not localized
 					new_item.text = item_data.preview_text
+				elseif item_data.text then 
+					new_item.text = item_data.text
+				elseif item_data.label_id then
+					new_item.text = managers.localization:text(item_data.label_id)
+				elseif item_data.label_index then
+					local label = self._label_presets_by_index[item_data.label_index]
+					new_item.text = label and managers.localization:text(label)
 				elseif message_preset_name then
 					new_item.text = managers.localization:text(message_preset_name)
 				end
@@ -1905,7 +1909,6 @@ function QuickChat:LoadMenuFromIni(ini_data) --converts and validates saved data
 						new_item[key] = item_data[key]
 					end
 				end
-				
 				new_menu_params.items[i] = new_item
 			end
 			
